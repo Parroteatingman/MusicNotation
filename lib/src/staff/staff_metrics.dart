@@ -39,6 +39,9 @@ class StaffMetrics {
     required double staffLineCenterY,
     required double leftPadding,
     bool showBarlines = true,
+    bool showEndBarline = false,
+    bool showFinalBarline = false,
+    double? staffExtendWidth,
   }) {
     var currentX = leftPadding;
     final measureRendereres = <MeasureRenderer>[];
@@ -52,6 +55,12 @@ class StaffMetrics {
       measureRendereres.add(m);
     }
 
-    return StaffRenderer(measureRendereres, showBarlines: showBarlines);
+    return StaffRenderer(
+      measureRendereres,
+      showBarlines: showBarlines,
+      showEndBarline: showEndBarline,
+      showFinalBarline: showFinalBarline,
+      staffExtendWidth: staffExtendWidth,
+    );
   }
 }

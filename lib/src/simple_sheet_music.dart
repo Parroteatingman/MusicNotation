@@ -34,6 +34,10 @@ class SimpleSheetMusic extends StatefulWidget {
     this.lineColor = Colors.black54,
     this.fontType = FontType.bravura,
     this.showBarlines = true,
+    this.showEndBarline = true,
+    this.showFinalBarline = true,
+    this.extendStaffToFullWidth = false,
+    this.maxCanvasScale,
   });
 
   /// The list of measures to be displayed.
@@ -61,6 +65,13 @@ class SimpleSheetMusic extends StatefulWidget {
 
   /// Whether to draw barlines between measures.
   final bool showBarlines;
+
+  final bool showEndBarline;
+  final bool showFinalBarline;
+  final bool extendStaffToFullWidth;
+
+  /// If set, caps the canvas scale for consistent sizing across multiple lines.
+  final double? maxCanvasScale;
 
   @override
   SimpleSheetMusicState createState() => SimpleSheetMusicState();
@@ -123,6 +134,10 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
             widgetWidth: widget.width,
             widgetHeight: widget.height,
             showBarlines: widget.showBarlines,
+            showEndBarline: widget.showEndBarline,
+            showFinalBarline: widget.showFinalBarline,
+            extendStaffToFullWidth: widget.extendStaffToFullWidth,
+            maxCanvasScale: widget.maxCanvasScale,
           );
           return GestureDetector(
             onTap: () {
