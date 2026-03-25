@@ -1,6 +1,3 @@
-import 'dart:ui';
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:simple_sheet_music/src/constants.dart';
 import 'package:simple_sheet_music/src/measure/measure_metrics.dart';
@@ -116,6 +113,8 @@ class MeasureRenderer {
 
     final bool stemUp = group.first.note.isStemUp;
     final beamThickness = measureMetrics.staffLineThickness * 5;
+    // Staff space height for constraining beam slope
+    final staffSpace = measureMetrics.staffLineThickness * 4;
 
     // Collect stem tip positions for each note
     final stemTips = <Offset>[];
@@ -125,37 +124,72 @@ class MeasureRenderer {
       stemRoots.add(nr.note.stemRootOffset + nr.renderOffset);
     }
 
-    // Calculate beam Y: use average stem tip Y to avoid excessive stem lengths.
-    // Then clamp so every stem is at least minStemLength from its root.
-    final avgTipY = stemTips.map((o) => o.dy).reduce((a, b) => a + b) / stemTips.length;
-    double beamY;
-    if (stemUp) {
-      // Beam above notes: use the minimum (highest) tip, but bias toward average
-      final minTipY = stemTips.map((o) => o.dy).reduce(math.min);
-      beamY = (minTipY + avgTipY) / 2;
-      // Ensure beam is above all stem roots
-      final maxRootY = stemRoots.map((o) => o.dy).reduce(math.max);
-      if (beamY > maxRootY) beamY = maxRootY - group.first.note.note.margin.top;
-    } else {
-      final maxTipY = stemTips.map((o) => o.dy).reduce(math.max);
-      beamY = (maxTipY + avgTipY) / 2;
-      final minRootY = stemRoots.map((o) => o.dy).reduce(math.min);
-      if (beamY < minRootY) beamY = minRootY + group.first.note.note.margin.top;
-    }
-
     final firstX = stemTips.first.dx;
     final lastX = stemTips.last.dx;
+    final xSpan = lastX - firstX;
 
-    // Draw stems from root to beam inner edge (not past it)
+    // Calculate slanted beam line following note movement direction.
+    // Use linear regression on stem root positions (note positions) to
+    // determine the natural slope, then constrain per standard notation rules.
+    double startBeamY, endBeamY;
+
+    if (xSpan < 0.001) {
+      // All notes at same X (shouldn't happen), use flat beam
+      final avgTipY = stemTips.map((o) => o.dy).reduce((a, b) => a + b) / stemTips.length;
+      startBeamY = avgTipY;
+      endBeamY = avgTipY;
+    } else {
+      // Calculate slope from first and last stem root positions
+      final firstRootY = stemRoots.first.dy;
+      final lastRootY = stemRoots.last.dy;
+      double slope = (lastRootY - firstRootY) / xSpan;
+
+      // Constrain slope: max one staff space across the beam span
+      final maxSlope = staffSpace / xSpan;
+      slope = slope.clamp(-maxSlope, maxSlope);
+
+      // Start from average tip Y, then apply slope centered on the group
+      final avgTipY = stemTips.map((o) => o.dy).reduce((a, b) => a + b) / stemTips.length;
+      final midX = (firstX + lastX) / 2;
+      startBeamY = avgTipY + slope * (firstX - midX);
+      endBeamY = avgTipY + slope * (lastX - midX);
+
+      // Ensure beam doesn't cross any stem root
+      if (stemUp) {
+        final margin = group.first.note.note.margin.top;
+        for (int i = 0; i < stemRoots.length; i++) {
+          final t = (stemTips[i].dx - firstX) / xSpan;
+          final beamAtNote = startBeamY + (endBeamY - startBeamY) * t;
+          if (beamAtNote > stemRoots[i].dy - margin) {
+            final shift = beamAtNote - (stemRoots[i].dy - margin);
+            startBeamY -= shift;
+            endBeamY -= shift;
+          }
+        }
+      } else {
+        final margin = group.first.note.note.margin.top;
+        for (int i = 0; i < stemRoots.length; i++) {
+          final t = (stemTips[i].dx - firstX) / xSpan;
+          final beamAtNote = startBeamY + (endBeamY - startBeamY) * t;
+          if (beamAtNote < stemRoots[i].dy + margin) {
+            final shift = (stemRoots[i].dy + margin) - beamAtNote;
+            startBeamY += shift;
+            endBeamY += shift;
+          }
+        }
+      }
+    }
+
+    // Draw stems from root to slanted beam inner edge
     final stemPaint = Paint()
       ..color = group.first.note.color
       ..strokeWidth = group.first.note.stemThickness;
-    // Stem ends at the inner edge of beam: for stem-up, beam is above,
-    // inner edge = beamY + beamThickness/2; for stem-down, inner edge = beamY - beamThickness/2
-    final stemEndY = stemUp
-        ? beamY + beamThickness / 2
-        : beamY - beamThickness / 2;
     for (int i = 0; i < group.length; i++) {
+      final t = xSpan > 0.001 ? (stemTips[i].dx - firstX) / xSpan : 0.0;
+      final beamAtNote = startBeamY + (endBeamY - startBeamY) * t;
+      final stemEndY = stemUp
+          ? beamAtNote + beamThickness / 2
+          : beamAtNote - beamThickness / 2;
       canvas.drawLine(
         stemRoots[i],
         Offset(stemTips[i].dx, stemEndY),
@@ -163,22 +197,22 @@ class MeasureRenderer {
       );
     }
 
-    // Draw beam (thick horizontal line) on top of stems
+    // Draw slanted beam
     final beamPaint = Paint()
       ..color = group.first.note.color
       ..strokeWidth = beamThickness
       ..strokeCap = StrokeCap.butt;
     canvas.drawLine(
-      Offset(firstX, beamY),
-      Offset(lastX, beamY),
+      Offset(firstX, startBeamY),
+      Offset(lastX, endBeamY),
       beamPaint,
     );
 
     // Draw secondary beams (double beam for sixteenth notes and shorter)
-    _drawPartialBeams(canvas, group, stemTips, beamY, beamThickness, beamPaint, stemUp, 1);
+    _drawPartialBeams(canvas, group, stemTips, startBeamY, endBeamY, firstX, xSpan, beamThickness, beamPaint, stemUp, 1);
 
     // Draw tertiary beams (triple beam for thirty-second notes and shorter)
-    _drawPartialBeams(canvas, group, stemTips, beamY, beamThickness, beamPaint, stemUp, 2);
+    _drawPartialBeams(canvas, group, stemTips, startBeamY, endBeamY, firstX, xSpan, beamThickness, beamPaint, stemUp, 2);
   }
 
   /// Whether a note duration qualifies for the given beam level.
@@ -205,7 +239,10 @@ class MeasureRenderer {
     Canvas canvas,
     List<NoteRenderer> group,
     List<Offset> stemTips,
-    double beamY,
+    double startBeamY,
+    double endBeamY,
+    double firstX,
+    double xSpan,
     double beamThickness,
     Paint beamPaint,
     bool stemUp,
@@ -236,8 +273,8 @@ class MeasureRenderer {
         if (runStart != -1) {
           final runEnd = beatBreak ? i - 1 : i - 1;
           _drawBeamSegment(
-              canvas, group, stemTips, beamY, beamThickness, beamPaint,
-              stemUp, beamLevel, runStart, runEnd);
+              canvas, group, stemTips, startBeamY, endBeamY, firstX, xSpan,
+              beamThickness, beamPaint, stemUp, beamLevel, runStart, runEnd);
         }
         // If this note qualifies but we broke due to beat boundary, start new run
         runStart = qualifies ? i : -1;
@@ -245,12 +282,23 @@ class MeasureRenderer {
     }
   }
 
+  /// Returns the beam Y at a given note index, following the slanted beam line.
+  double _beamYAt(int noteIndex, List<Offset> stemTips, double startBeamY,
+      double endBeamY, double firstX, double xSpan) {
+    if (xSpan < 0.001) return startBeamY;
+    final t = (stemTips[noteIndex].dx - firstX) / xSpan;
+    return startBeamY + (endBeamY - startBeamY) * t;
+  }
+
   /// Draws a single beam segment (full or partial stub) for a sub-run of notes.
   void _drawBeamSegment(
     Canvas canvas,
     List<NoteRenderer> group,
     List<Offset> stemTips,
-    double beamY,
+    double startBeamY,
+    double endBeamY,
+    double firstX,
+    double xSpan,
     double beamThickness,
     Paint beamPaint,
     bool stemUp,
@@ -258,13 +306,17 @@ class MeasureRenderer {
     int runStart,
     int runEnd,
   ) {
-    final y = stemUp
-        ? beamY + beamThickness * 1.5 * beamLevel
-        : beamY - beamThickness * 1.5 * beamLevel;
+    double yAt(int idx) {
+      final baseY = _beamYAt(idx, stemTips, startBeamY, endBeamY, firstX, xSpan);
+      return stemUp
+          ? baseY + beamThickness * 1.5 * beamLevel
+          : baseY - beamThickness * 1.5 * beamLevel;
+    }
 
     if (runStart == runEnd) {
       // Single note: draw a short partial beam stub
       final x = stemTips[runStart].dx;
+      final y = yAt(runStart);
       const partialLen = 8.0;
       // Point stub toward the neighboring notes in the beam group
       final bool pointRight = runStart == 0 ||
@@ -275,10 +327,10 @@ class MeasureRenderer {
       final endX = pointRight ? x + partialLen : x;
       canvas.drawLine(Offset(startX, y), Offset(endX, y), beamPaint);
     } else {
-      // Multiple notes: draw full beam between them
+      // Multiple notes: draw slanted beam between them
       canvas.drawLine(
-        Offset(stemTips[runStart].dx, y),
-        Offset(stemTips[runEnd].dx, y),
+        Offset(stemTips[runStart].dx, yAt(runStart)),
+        Offset(stemTips[runEnd].dx, yAt(runEnd)),
         beamPaint,
       );
     }
