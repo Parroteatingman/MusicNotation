@@ -55,16 +55,8 @@ class SheetMusicLayout {
   /// The horizontal padding on the canvas.
   double get _horizontalPaddingOnCanvas => _horizontalPadding / canvasScale;
 
-  /// The left padding on the canvas — left-aligned when maxCanvasScale is active.
-  double get _leftPaddingOnCanvas {
-    if (maxCanvasScale != null) {
-      // Left-align: use minimal padding
-      return _maximumStaffHorizontalMarginSum > 0
-          ? _maximumStaffHorizontalMarginSum / (2 * canvasScale)
-          : 0;
-    }
-    return _horizontalPaddingOnCanvas / 2;
-  }
+  /// The left padding on the canvas.
+  double get _leftPaddingOnCanvas => _horizontalPaddingOnCanvas / 2;
 
   /// The vertical padding of the sheet music.
   double get _verticalPadding => widgetHeight - _staffsHeightsSum * canvasScale;
@@ -81,20 +73,27 @@ class SheetMusicLayout {
   /// The list of staff renderers.
   List<StaffRenderer> get staffRenderers {
     var currentY = _upperPaddingOnCanvas;
-    return metrics.staffsMetricses.map((staffMetrics) {
+    final staffList = metrics.staffsMetricses.toList();
+    final lastIndex = staffList.length - 1;
+    final result = <StaffRenderer>[];
+    for (int i = 0; i <= lastIndex; i++) {
+      final staffMetrics = staffList[i];
       currentY += staffMetrics.upperHeight;
+      final isLast = i == lastIndex;
       final staffRenderer = staffMetrics.renderer(
         this,
         staffLineCenterY: currentY,
         leftPadding: _leftPaddingOnCanvas,
         showBarlines: showBarlines,
-        showEndBarline: showEndBarline,
-        showFinalBarline: showFinalBarline,
+        // 非末行画结尾小节线，末行画终止双线
+        showEndBarline: !isLast && showEndBarline,
+        showFinalBarline: isLast && showFinalBarline,
         staffExtendWidth: extendStaffToFullWidth ? _fullWidthOnCanvas : null,
       );
       currentY += staffMetrics.lowerHeight;
-      return staffRenderer;
-    }).toList();
+      result.add(staffRenderer);
+    }
+    return result;
   }
 
   /// The sum of the heights of all the staffs.
