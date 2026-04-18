@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:simple_sheet_music/src/constants.dart';
 import 'package:simple_sheet_music/src/glyph_metadata.dart';
@@ -17,6 +19,7 @@ class Rest implements MusicalSymbol {
     this.color = Colors.black,
     this.isDotted = false,
     this.tuplet,
+    this.chordLabel,
   });
 
   @override
@@ -32,6 +35,9 @@ class Rest implements MusicalSymbol {
 
   /// Tuplet grouping (e.g., 3 for triplet). Null means no tuplet.
   final int? tuplet;
+
+  /// Optional chord label displayed above the rest.
+  final String? chordLabel;
 
   @override
   MusicalSymbolMetrics setContext(
@@ -75,10 +81,19 @@ class RestMetrics implements MusicalSymbolMetrics {
   double get leftMargin => rest.margin.left;
 
   @override
-  double get upperHeight => -bbox.top;
+  double get upperHeight {
+    final baseUpperHeight = -bbox.top;
+    if (rest.chordLabel == null || rest.chordLabel!.isEmpty) {
+      return baseUpperHeight;
+    }
+    return baseUpperHeight > Constants.staffSpace * 5.4
+        ? baseUpperHeight
+        : Constants.staffSpace * 5.4;
+  }
 
   @override
-  double get width => bbox.width + (rest.isDotted ? Constants.staffSpace * 0.8 : 0);
+  double get width =>
+      bbox.width + (rest.isDotted ? Constants.staffSpace * 0.8 : 0);
 
   @override
   MusicalSymbolRenderer renderer(
@@ -122,8 +137,69 @@ class RestRenderer implements MusicalSymbolRenderer {
 
   @override
   void render(Canvas canvas) {
+    _renderChordLabel(canvas);
     canvas.drawPath(renderPath, Paint()..color = restMetrics.rest.color);
     _renderDot(canvas);
+  }
+
+  void _renderChordLabel(Canvas canvas) {
+    final label = restMetrics.rest.chordLabel;
+    if (label == null || label.isEmpty) return;
+
+    int rootEnd = 1;
+    if (label.length > 1 &&
+        (label[1] == '#' ||
+            label[1] == 'b' ||
+            label[1] == '♯' ||
+            label[1] == '♭')) {
+      rootEnd = 2;
+    }
+    final root = label.substring(0, rootEnd);
+    final suffix = label.length > rootEnd ? label.substring(rootEnd) : '';
+
+    final rootFontSize = Constants.staffSpace * 1.35;
+    final suffixFontSize = Constants.staffSpace * 0.9;
+
+    final rootPainter = TextPainter(
+      text: TextSpan(
+        text: root,
+        style: TextStyle(
+          color: Colors.black,
+          fontSize: rootFontSize,
+          fontWeight: FontWeight.bold,
+          fontFamily: 'serif',
+        ),
+      ),
+      textDirection: ui.TextDirection.ltr,
+    )..layout();
+
+    TextPainter? suffixPainter;
+    if (suffix.isNotEmpty) {
+      suffixPainter = TextPainter(
+        text: TextSpan(
+          text: suffix,
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: suffixFontSize,
+            fontWeight: FontWeight.bold,
+            fontFamily: 'serif',
+          ),
+        ),
+        textDirection: ui.TextDirection.ltr,
+      )..layout();
+    }
+
+    final x = symbolX + restMetrics.leftMargin / layout.canvasScale;
+    final topStaffLine = staffLineCenterY - Constants.staffSpace * 2;
+    final y = topStaffLine - Constants.staffSpace * 2.15;
+
+    rootPainter.paint(canvas, Offset(x, y - rootPainter.height));
+
+    if (suffixPainter != null) {
+      final suffixX = x + rootPainter.width;
+      final suffixY = y - rootPainter.height;
+      suffixPainter.paint(canvas, Offset(suffixX, suffixY));
+    }
   }
 
   void _renderDot(Canvas canvas) {
@@ -135,7 +211,8 @@ class RestRenderer implements MusicalSymbolRenderer {
       bounds.right + Constants.staffSpace * 0.35,
       staffLineCenterY - Constants.staffSpace * 0.5,
     );
-    canvas.drawCircle(dotCenter, dotRadius, Paint()..color = restMetrics.rest.color);
+    canvas.drawCircle(
+        dotCenter, dotRadius, Paint()..color = restMetrics.rest.color);
   }
 
   Path get renderPath => restMetrics.path.shift(renderOffset);

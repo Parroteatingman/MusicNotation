@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:simple_sheet_music/src/constants.dart';
 import 'package:simple_sheet_music/src/measure/measure_renderer.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_renderer.dart';
+import 'package:simple_sheet_music/src/music_objects/notes/single_note/note.dart';
 
 /// The renderer for a staff, which is responsible for rendering measures and handling hit tests.
 class StaffRenderer {
@@ -17,6 +18,7 @@ class StaffRenderer {
   final bool showBarlines;
   final bool showEndBarline;
   final bool showFinalBarline;
+
   /// If set, extend staff lines to this width (in canvas coordinates).
   final double? staffExtendWidth;
 
@@ -35,16 +37,91 @@ class StaffRenderer {
 
   /// Renders the staff on the given canvas with the specified size and font family.
   void render(Canvas canvas, Size size) {
+    final suppressedLeadingTies = <int>{};
+    final suppressedTrailingTies = <int>{};
+    final crossMeasureTies = <_CrossMeasureTie>[];
+
+    for (int i = 0; i < measureRendereres.length - 1; i++) {
+      final crossTie =
+          _buildCrossMeasureTie(measureRendereres[i], measureRendereres[i + 1]);
+      if (crossTie == null) continue;
+
+      suppressedTrailingTies.add(i);
+      suppressedLeadingTies.add(i + 1);
+      crossMeasureTies.add(crossTie);
+    }
+
     // If staffExtendWidth is set, extend staff lines beyond content
     if (staffExtendWidth != null && measureRendereres.isNotEmpty) {
       _renderExtendedStaffLines(canvas);
     }
-    for (final measure in measureRendereres) {
-      measure.render(canvas, size);
+    for (int i = 0; i < measureRendereres.length; i++) {
+      measureRendereres[i].render(
+        canvas,
+        size,
+        suppressLeadingTie: suppressedLeadingTies.contains(i),
+        suppressTrailingTie: suppressedTrailingTies.contains(i),
+      );
     }
     if (showBarlines) _renderBarlines(canvas);
     if (showEndBarline) _renderEndBarline(canvas);
     if (showFinalBarline) _renderFinalBarline(canvas);
+    for (final tie in crossMeasureTies) {
+      _drawCrossMeasureTie(canvas, tie);
+    }
+  }
+
+  _CrossMeasureTie? _buildCrossMeasureTie(
+    MeasureRenderer currentMeasure,
+    MeasureRenderer nextMeasure,
+  ) {
+    final start = currentMeasure.lastNoteRenderer;
+    final end = nextMeasure.firstNoteRenderer;
+    if (start == null || end == null) return null;
+
+    final startTie = start.note.note.tie;
+    final endTie = end.note.note.tie;
+    if (startTie == null ||
+        !startTie.isStart ||
+        endTie == null ||
+        !endTie.isStop ||
+        start.note.pitch != end.note.pitch) {
+      return null;
+    }
+
+    return _CrossMeasureTie(
+      start: start,
+      end: end,
+      strokeWidth: currentMeasure.measureMetrics.staffLineThickness * 2,
+    );
+  }
+
+  void _drawCrossMeasureTie(Canvas canvas, _CrossMeasureTie tie) {
+    final startBounds = tie.start.noteHeadBounds;
+    final endBounds = tie.end.noteHeadBounds;
+    final tieBelow = tie.start.note.isStemUp != tie.end.note.isStemUp
+        ? false
+        : tie.start.note.isStemUp;
+    final baselineY = tieBelow
+        ? startBounds.bottom + Constants.staffSpace * 0.35
+        : startBounds.top - Constants.staffSpace * 0.35;
+    final archHeight = Constants.staffSpace * 0.7 * (tieBelow ? 1 : -1);
+    final startX = startBounds.right - Constants.staffSpace * 0.1;
+    final endX = endBounds.left + Constants.staffSpace * 0.1;
+    final controlX = (startX + endX) / 2;
+    final controlY = baselineY + archHeight;
+
+    final tiePaint = Paint()
+      ..color = tie.start.note.color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = tie.strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    final path = Path()
+      ..moveTo(startX, baselineY)
+      ..quadraticBezierTo(controlX, controlY, endX, baselineY);
+
+    canvas.drawPath(path, tiePaint);
   }
 
   /// Draws vertical barlines between measures.
@@ -138,4 +215,16 @@ class StaffRenderer {
       );
     }
   }
+}
+
+class _CrossMeasureTie {
+  const _CrossMeasureTie({
+    required this.start,
+    required this.end,
+    required this.strokeWidth,
+  });
+
+  final NoteRenderer start;
+  final NoteRenderer end;
+  final double strokeWidth;
 }

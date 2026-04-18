@@ -179,7 +179,15 @@ class NoteMetrics implements MusicalSymbolMetrics {
       );
 
   @override
-  double get upperHeight => -bbox.top;
+  double get upperHeight {
+    final baseUpperHeight = -bbox.top;
+    if (note.chordLabel == null || note.chordLabel!.isEmpty) {
+      return baseUpperHeight;
+    }
+    return baseUpperHeight > Constants.staffSpace * 5.4
+        ? baseUpperHeight
+        : Constants.staffSpace * 5.4;
+  }
 
   @override
   double get width => bbox.width;
@@ -407,8 +415,8 @@ class NoteRenderer implements MusicalSymbolRenderer {
     final root = label.substring(0, rootEnd);
     final suffix = label.length > rootEnd ? label.substring(rootEnd) : '';
 
-    final rootFontSize = Constants.staffSpace * 1.1;
-    final suffixFontSize = Constants.staffSpace * 0.72;
+    final rootFontSize = Constants.staffSpace * 1.35;
+    final suffixFontSize = Constants.staffSpace * 0.9;
 
     // Render root note letter
     final rootPainter = TextPainter(
@@ -427,7 +435,7 @@ class NoteRenderer implements MusicalSymbolRenderer {
 
     final x = symbolX + note.margin.left / canvasScale;
     final topStaffLine = staffLineCenterY - Constants.staffSpace * 2;
-    final y = topStaffLine - Constants.staffSpace * 1.8;
+    final y = topStaffLine - Constants.staffSpace * 2.15;
 
     rootPainter.paint(canvas, Offset(x, y - rootPainter.height));
 

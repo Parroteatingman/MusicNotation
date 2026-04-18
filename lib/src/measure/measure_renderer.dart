@@ -36,13 +36,22 @@ class MeasureRenderer {
   }
 
   /// Renders the measure on the given [canvas] with the specified [size].
-  void render(Canvas canvas, Size size) {
+  void render(
+    Canvas canvas,
+    Size size, {
+    bool suppressLeadingTie = false,
+    bool suppressTrailingTie = false,
+  }) {
     _renderStaffLine(canvas);
     for (final symbol in symbolRenderers) {
       symbol.render(canvas);
     }
     _renderBeams(canvas);
-    _renderTies(canvas);
+    _renderTies(
+      canvas,
+      suppressLeadingTie: suppressLeadingTie,
+      suppressTrailingTie: suppressTrailingTie,
+    );
     _renderTupletBrackets(canvas);
   }
 
@@ -378,13 +387,37 @@ class MeasureRenderer {
     }
   }
 
-  void _renderTies(Canvas canvas) {
-    final noteRenderers = <NoteRenderer>[];
+  List<NoteRenderer> get noteRenderers {
+    final notes = <NoteRenderer>[];
     for (final symbol in symbolRenderers) {
       if (symbol is NoteRenderer) {
-        noteRenderers.add(symbol);
+        notes.add(symbol);
       }
     }
+    return notes;
+  }
+
+  NoteRenderer? get firstNoteRenderer {
+    for (final symbol in symbolRenderers) {
+      if (symbol is NoteRenderer) return symbol;
+    }
+    return null;
+  }
+
+  NoteRenderer? get lastNoteRenderer {
+    for (int i = symbolRenderers.length - 1; i >= 0; i--) {
+      final symbol = symbolRenderers[i];
+      if (symbol is NoteRenderer) return symbol;
+    }
+    return null;
+  }
+
+  void _renderTies(
+    Canvas canvas, {
+    required bool suppressLeadingTie,
+    required bool suppressTrailingTie,
+  }) {
+    final noteRenderers = this.noteRenderers;
 
     for (var i = 0; i < noteRenderers.length; i++) {
       final current = noteRenderers[i];
@@ -392,11 +425,16 @@ class MeasureRenderer {
       if (tie == null || !tie.isStart) continue;
 
       final next = i + 1 < noteRenderers.length ? noteRenderers[i + 1] : null;
-      _drawTie(canvas, current, next);
+      if (next != null) {
+        _drawTie(canvas, current, next);
+      } else if (!suppressTrailingTie) {
+        _drawTie(canvas, current, null);
+      }
     }
 
     if (noteRenderers.isNotEmpty &&
-        noteRenderers.first.note.note.tie == TieType.stop) {
+        noteRenderers.first.note.note.tie == TieType.stop &&
+        !suppressLeadingTie) {
       _drawLeadingTie(canvas, noteRenderers.first);
     }
   }
