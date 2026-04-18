@@ -4,6 +4,7 @@ import 'package:simple_sheet_music/src/measure/measure_metrics.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_renderer.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/note_duration.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/single_note/note.dart';
+import 'package:simple_sheet_music/src/music_objects/notes/tie_type.dart';
 import 'package:simple_sheet_music/src/music_objects/rest/rest.dart';
 import 'package:simple_sheet_music/src/sheet_music_layout.dart';
 
@@ -41,6 +42,7 @@ class MeasureRenderer {
       symbol.render(canvas);
     }
     _renderBeams(canvas);
+    _renderTies(canvas);
     _renderTupletBrackets(canvas);
   }
 
@@ -113,6 +115,7 @@ class MeasureRenderer {
 
     final bool stemUp = group.first.note.isStemUp;
     final beamThickness = measureMetrics.staffLineThickness * 5;
+    final beamGap = beamThickness * 0.8;
     // Staff space height for constraining beam slope
     final staffSpace = measureMetrics.staffLineThickness * 4;
 
@@ -135,7 +138,8 @@ class MeasureRenderer {
 
     if (xSpan < 0.001) {
       // All notes at same X (shouldn't happen), use flat beam
-      final avgTipY = stemTips.map((o) => o.dy).reduce((a, b) => a + b) / stemTips.length;
+      final avgTipY =
+          stemTips.map((o) => o.dy).reduce((a, b) => a + b) / stemTips.length;
       startBeamY = avgTipY;
       endBeamY = avgTipY;
     } else {
@@ -149,7 +153,8 @@ class MeasureRenderer {
       slope = slope.clamp(-maxSlope, maxSlope);
 
       // Start from average tip Y, then apply slope centered on the group
-      final avgTipY = stemTips.map((o) => o.dy).reduce((a, b) => a + b) / stemTips.length;
+      final avgTipY =
+          stemTips.map((o) => o.dy).reduce((a, b) => a + b) / stemTips.length;
       final midX = (firstX + lastX) / 2;
       startBeamY = avgTipY + slope * (firstX - midX);
       endBeamY = avgTipY + slope * (lastX - midX);
@@ -209,10 +214,12 @@ class MeasureRenderer {
     );
 
     // Draw secondary beams (double beam for sixteenth notes and shorter)
-    _drawPartialBeams(canvas, group, stemTips, startBeamY, endBeamY, firstX, xSpan, beamThickness, beamPaint, stemUp, 1);
+    _drawPartialBeams(canvas, group, stemTips, startBeamY, endBeamY, firstX,
+        xSpan, beamThickness, beamGap, beamPaint, stemUp, 1);
 
     // Draw tertiary beams (triple beam for thirty-second notes and shorter)
-    _drawPartialBeams(canvas, group, stemTips, startBeamY, endBeamY, firstX, xSpan, beamThickness, beamPaint, stemUp, 2);
+    _drawPartialBeams(canvas, group, stemTips, startBeamY, endBeamY, firstX,
+        xSpan, beamThickness, beamGap, beamPaint, stemUp, 2);
   }
 
   /// Whether a note duration qualifies for the given beam level.
@@ -244,6 +251,7 @@ class MeasureRenderer {
     double firstX,
     double xSpan,
     double beamThickness,
+    double beamGap,
     Paint beamPaint,
     bool stemUp,
     int beamLevel,
@@ -273,8 +281,20 @@ class MeasureRenderer {
         if (runStart != -1) {
           final runEnd = beatBreak ? i - 1 : i - 1;
           _drawBeamSegment(
-              canvas, group, stemTips, startBeamY, endBeamY, firstX, xSpan,
-              beamThickness, beamPaint, stemUp, beamLevel, runStart, runEnd);
+              canvas,
+              group,
+              stemTips,
+              startBeamY,
+              endBeamY,
+              firstX,
+              xSpan,
+              beamThickness,
+              beamGap,
+              beamPaint,
+              stemUp,
+              beamLevel,
+              runStart,
+              runEnd);
         }
         // If this note qualifies but we broke due to beat boundary, start new run
         runStart = qualifies ? i : -1;
@@ -300,6 +320,7 @@ class MeasureRenderer {
     double firstX,
     double xSpan,
     double beamThickness,
+    double beamGap,
     Paint beamPaint,
     bool stemUp,
     int beamLevel,
@@ -307,25 +328,46 @@ class MeasureRenderer {
     int runEnd,
   ) {
     double yAt(int idx) {
-      final baseY = _beamYAt(idx, stemTips, startBeamY, endBeamY, firstX, xSpan);
-      return stemUp
-          ? baseY + beamThickness * 1.5 * beamLevel
-          : baseY - beamThickness * 1.5 * beamLevel;
+      final baseY =
+          _beamYAt(idx, stemTips, startBeamY, endBeamY, firstX, xSpan);
+      final beamOffset = (beamThickness + beamGap) * beamLevel;
+      return stemUp ? baseY + beamOffset : baseY - beamOffset;
     }
+
+    final beamSlope = xSpan < 0.001 ? 0.0 : (endBeamY - startBeamY) / xSpan;
 
     if (runStart == runEnd) {
       // Single note: draw a short partial beam stub
       final x = stemTips[runStart].dx;
       final y = yAt(runStart);
-      const partialLen = 8.0;
-      // Point stub toward the neighboring notes in the beam group
-      final bool pointRight = runStart == 0 ||
-          (runStart > 0 &&
-              group[runStart].note.note.beatPosition.floor() !=
-                  group[runStart - 1].note.note.beatPosition.floor());
+      // Point the stub toward the nearest neighboring note in the group.
+      final bool pointRight;
+      if (runStart == 0 && group.length > 1) {
+        pointRight = stemUp;
+      } else if (runStart == group.length - 1) {
+        pointRight = !stemUp;
+      } else {
+        final prevDistance =
+            (stemTips[runStart].dx - stemTips[runStart - 1].dx).abs();
+        final nextDistance =
+            (stemTips[runStart + 1].dx - stemTips[runStart].dx).abs();
+        pointRight = nextDistance <= prevDistance;
+      }
+      final previousGap = runStart > 0
+          ? (stemTips[runStart].dx - stemTips[runStart - 1].dx).abs()
+          : 0.0;
+      final nextGap = runStart < group.length - 1
+          ? (stemTips[runStart + 1].dx - stemTips[runStart].dx).abs()
+          : 0.0;
+      final referenceGap = pointRight ? nextGap : previousGap;
+      final partialLen = referenceGap > 0
+          ? (referenceGap * 9.2).clamp(160.0, 272.0).toDouble()
+          : 192.0;
       final startX = pointRight ? x : x - partialLen;
       final endX = pointRight ? x + partialLen : x;
-      canvas.drawLine(Offset(startX, y), Offset(endX, y), beamPaint);
+      final startY = pointRight ? y : y - beamSlope * partialLen;
+      final endY = pointRight ? y + beamSlope * partialLen : y;
+      canvas.drawLine(Offset(startX, startY), Offset(endX, endY), beamPaint);
     } else {
       // Multiple notes: draw slanted beam between them
       canvas.drawLine(
@@ -334,6 +376,84 @@ class MeasureRenderer {
         beamPaint,
       );
     }
+  }
+
+  void _renderTies(Canvas canvas) {
+    final noteRenderers = <NoteRenderer>[];
+    for (final symbol in symbolRenderers) {
+      if (symbol is NoteRenderer) {
+        noteRenderers.add(symbol);
+      }
+    }
+
+    for (var i = 0; i < noteRenderers.length; i++) {
+      final current = noteRenderers[i];
+      final tie = current.note.note.tie;
+      if (tie == null || !tie.isStart) continue;
+
+      final next = i + 1 < noteRenderers.length ? noteRenderers[i + 1] : null;
+      _drawTie(canvas, current, next);
+    }
+
+    if (noteRenderers.isNotEmpty &&
+        noteRenderers.first.note.note.tie == TieType.stop) {
+      _drawLeadingTie(canvas, noteRenderers.first);
+    }
+  }
+
+  void _drawTie(Canvas canvas, NoteRenderer start, NoteRenderer? end) {
+    final startBounds = start.noteHeadBounds;
+    final endBounds = end?.noteHeadBounds;
+    final tieBelow = end != null && start.note.isStemUp != end.note.isStemUp
+        ? false
+        : start.note.isStemUp;
+    final baselineY = tieBelow
+        ? startBounds.bottom + Constants.staffSpace * 0.35
+        : startBounds.top - Constants.staffSpace * 0.35;
+    final archHeight = Constants.staffSpace * 0.7 * (tieBelow ? 1 : -1);
+    final startX = startBounds.right - Constants.staffSpace * 0.1;
+    final endX = endBounds != null
+        ? endBounds.left + Constants.staffSpace * 0.1
+        : measureOriginX + width - Constants.staffSpace * 0.3;
+    final controlX = (startX + endX) / 2;
+    final controlY = baselineY + archHeight;
+
+    final tiePaint = Paint()
+      ..color = start.note.color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = measureMetrics.staffLineThickness * 2
+      ..strokeCap = StrokeCap.round;
+
+    final path = Path()
+      ..moveTo(startX, baselineY)
+      ..quadraticBezierTo(controlX, controlY, endX, baselineY);
+
+    canvas.drawPath(path, tiePaint);
+  }
+
+  void _drawLeadingTie(Canvas canvas, NoteRenderer end) {
+    final endBounds = end.noteHeadBounds;
+    final tieBelow = end.note.isStemUp;
+    final baselineY = tieBelow
+        ? endBounds.bottom + Constants.staffSpace * 0.35
+        : endBounds.top - Constants.staffSpace * 0.35;
+    final archHeight = Constants.staffSpace * 0.7 * (tieBelow ? 1 : -1);
+    final startX = measureOriginX + Constants.staffSpace * 0.2;
+    final endX = endBounds.left + Constants.staffSpace * 0.1;
+    final controlX = (startX + endX) / 2;
+    final controlY = baselineY + archHeight;
+
+    final tiePaint = Paint()
+      ..color = end.note.color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = measureMetrics.staffLineThickness * 2
+      ..strokeCap = StrokeCap.round;
+
+    final path = Path()
+      ..moveTo(startX, baselineY)
+      ..quadraticBezierTo(controlX, controlY, endX, baselineY);
+
+    canvas.drawPath(path, tiePaint);
   }
 
   final SheetMusicLayout layout;
@@ -405,7 +525,9 @@ class MeasureRenderer {
   /// Get the right X of a symbol renderer for bracket drawing.
   double _getSymbolRightX(MusicalSymbolRenderer sr) {
     if (sr is NoteRenderer) {
-      return sr.renderOffset.dx + sr.note.margin.left / scale + sr.note.noteHeadWidth;
+      return sr.renderOffset.dx +
+          sr.note.margin.left / scale +
+          sr.note.noteHeadWidth;
     }
     if (sr is RestRenderer) {
       return sr.renderArea.right;
@@ -466,9 +588,11 @@ class MeasureRenderer {
     final hookLen = Constants.staffSpace * 0.4 * (stemUp ? 1 : -1);
 
     // Left hook
-    canvas.drawLine(Offset(firstX, bracketY + hookLen), Offset(firstX, bracketY), bracketPaint);
+    canvas.drawLine(Offset(firstX, bracketY + hookLen),
+        Offset(firstX, bracketY), bracketPaint);
     // Right hook
-    canvas.drawLine(Offset(lastX, bracketY + hookLen), Offset(lastX, bracketY), bracketPaint);
+    canvas.drawLine(Offset(lastX, bracketY + hookLen), Offset(lastX, bracketY),
+        bracketPaint);
 
     // Draw number
     final textPainter = TextPainter(
@@ -484,15 +608,20 @@ class MeasureRenderer {
       textDirection: TextDirection.ltr,
     );
     textPainter.layout();
-    textPainter.paint(canvas, Offset(centerX - textPainter.width / 2, bracketY - textPainter.height / 2));
+    textPainter.paint(
+        canvas,
+        Offset(centerX - textPainter.width / 2,
+            bracketY - textPainter.height / 2));
 
     // Bracket lines with gap for number
     final gapHalf = textPainter.width / 2 + Constants.staffSpace * 0.2;
     if (centerX - gapHalf > firstX) {
-      canvas.drawLine(Offset(firstX, bracketY), Offset(centerX - gapHalf, bracketY), bracketPaint);
+      canvas.drawLine(Offset(firstX, bracketY),
+          Offset(centerX - gapHalf, bracketY), bracketPaint);
     }
     if (centerX + gapHalf < lastX) {
-      canvas.drawLine(Offset(centerX + gapHalf, bracketY), Offset(lastX, bracketY), bracketPaint);
+      canvas.drawLine(Offset(centerX + gapHalf, bracketY),
+          Offset(lastX, bracketY), bracketPaint);
     }
   }
 }

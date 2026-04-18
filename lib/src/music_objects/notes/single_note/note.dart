@@ -17,6 +17,7 @@ import 'package:simple_sheet_music/src/music_objects/notes/noteflag_type.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/notehead_type.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/positions.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/stem_direction.dart';
+import 'package:simple_sheet_music/src/music_objects/notes/tie_type.dart';
 import 'package:simple_sheet_music/src/musical_context.dart';
 import 'package:simple_sheet_music/src/sheet_music_layout.dart';
 
@@ -35,6 +36,7 @@ class Note implements MusicalSymbol {
     this.chordLabel,
     this.isDotted = false,
     this.tuplet,
+    this.tie,
   });
 
   @override
@@ -76,6 +78,9 @@ class Note implements MusicalSymbol {
 
   /// Tuplet grouping (e.g., 3 for triplet). Null means no tuplet.
   final int? tuplet;
+
+  /// Tie connection type for this note.
+  final TieType? tie;
 
   /// The type of note head based on the note duration.
   NoteHeadType get noteHeadType => noteDuration.noteHeadType;
@@ -393,7 +398,10 @@ class NoteRenderer implements MusicalSymbolRenderer {
     // e.g., "Dm7" -> root="D", suffix="m7"; "Cmaj7" -> root="C", suffix="maj7"
     int rootEnd = 1;
     if (label.length > 1 &&
-        (label[1] == '#' || label[1] == 'b' || label[1] == '♯' || label[1] == '♭')) {
+        (label[1] == '#' ||
+            label[1] == 'b' ||
+            label[1] == '♯' ||
+            label[1] == '♭')) {
       rootEnd = 2;
     }
     final root = label.substring(0, rootEnd);
@@ -542,4 +550,14 @@ class NoteRenderer implements MusicalSymbolRenderer {
 
   /// Returns the center X position of the note head.
   double get _noteHeadCenterX => _noteHeadLeftX + note.noteHeadWidth / 2;
+
+  /// Public note head bounds for higher-level renderers such as ties.
+  Rect get noteHeadBounds => noteHeadRenderPath.getBounds();
+
+  /// Public center point of the rendered note head.
+  Offset get noteHeadCenter => noteHeadBounds.center;
+
+  double get noteHeadLeft => noteHeadBounds.left;
+
+  double get noteHeadRight => noteHeadBounds.right;
 }
