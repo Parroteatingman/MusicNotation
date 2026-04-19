@@ -3,9 +3,13 @@ import 'package:simple_sheet_music/src/sheet_music_layout.dart';
 
 /// A custom painter that renders the sheet music based on the provided layout.
 class SheetMusicRenderer extends CustomPainter {
-  const SheetMusicRenderer(this.sheetMusicLayout);
+  const SheetMusicRenderer(
+    this.sheetMusicLayout, {
+    required this.repaintKey,
+  });
 
   final SheetMusicLayout sheetMusicLayout;
+  final Object repaintKey;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -14,5 +18,6 @@ class SheetMusicRenderer extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(SheetMusicRenderer oldDelegate) => true;
+  bool shouldRepaint(SheetMusicRenderer oldDelegate) =>
+      oldDelegate.repaintKey != repaintKey;
 }

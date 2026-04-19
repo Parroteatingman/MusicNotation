@@ -85,6 +85,8 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
   GlyphPaths? _glyphPath;
   GlyphMetadata? _metadata;
   Future<void>? _loadFuture;
+  Object? _cachedRenderKey;
+  SheetMusicRenderer? _cachedRenderer;
 
   FontType get fontType => widget.fontType;
 
@@ -101,6 +103,64 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
     _glyphPath = GlyphPaths(allGlyphs);
     final json = await rootBundle.loadString(fontType.metadataPath);
     _metadata = GlyphMetadata(jsonDecode(json) as Map<String, dynamic>);
+  }
+
+  Object _buildRenderKey() {
+    return Object.hashAll([
+      widget.width,
+      widget.height,
+      widget.lineColor.toARGB32(),
+      widget.fontType,
+      widget.initialClefType,
+      widget.initialKeySignatureType,
+      widget.showBarlines,
+      widget.showEndBarline,
+      widget.showFinalBarline,
+      widget.extendStaffToFullWidth,
+      widget.maxCanvasScale,
+      widget.measures.length,
+      for (final measure in widget.measures)
+        Object.hash(
+          measure.isNewLine,
+          measure.musicalSymbols.length,
+          Object.hashAll(
+            measure.musicalSymbols.map(identityHashCode),
+          ),
+        ),
+    ]);
+  }
+
+  SheetMusicRenderer _resolveRenderer() {
+    final renderKey = _buildRenderKey();
+    if (_cachedRenderer != null && _cachedRenderKey == renderKey) {
+      return _cachedRenderer!;
+    }
+
+    final metricsBuilder = SheetMusicMetrics(
+      widget.measures,
+      widget.initialClefType,
+      widget.initialKeySignatureType,
+      _metadata!,
+      _glyphPath!,
+    );
+    final layout = SheetMusicLayout(
+      metricsBuilder,
+      widget.lineColor,
+      widgetWidth: widget.width,
+      widgetHeight: widget.height,
+      showBarlines: widget.showBarlines,
+      showEndBarline: widget.showEndBarline,
+      showFinalBarline: widget.showFinalBarline,
+      extendStaffToFullWidth: widget.extendStaffToFullWidth,
+      maxCanvasScale: widget.maxCanvasScale,
+    );
+
+    _cachedRenderKey = renderKey;
+    _cachedRenderer = SheetMusicRenderer(
+      layout,
+      repaintKey: renderKey,
+    );
+    return _cachedRenderer!;
   }
 
   @override
@@ -121,34 +181,20 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
           );
         }
         try {
-          final metricsBuilder = SheetMusicMetrics(
-            widget.measures,
-            widget.initialClefType,
-            widget.initialKeySignatureType,
-            _metadata!,
-            _glyphPath!,
-          );
-          final layout = SheetMusicLayout(
-            metricsBuilder,
-            widget.lineColor,
-            widgetWidth: widget.width,
-            widgetHeight: widget.height,
-            showBarlines: widget.showBarlines,
-            showEndBarline: widget.showEndBarline,
-            showFinalBarline: widget.showFinalBarline,
-            extendStaffToFullWidth: widget.extendStaffToFullWidth,
-            maxCanvasScale: widget.maxCanvasScale,
-          );
+          final renderer = _resolveRenderer();
           return GestureDetector(
             onTap: () {
               // print('Tapped');
             },
-            child: CustomPaint(
-              size: targetSize,
-              painter: SheetMusicRenderer(layout),
+            child: RepaintBoundary(
+              child: CustomPaint(
+                size: targetSize,
+                painter: renderer,
+                isComplex: true,
+              ),
             ),
           );
-        } catch (e) {
+        } on Object catch (e) {
           return Center(
             child: Text(
               'Render error: $e',
