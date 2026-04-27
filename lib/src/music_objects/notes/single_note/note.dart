@@ -29,6 +29,7 @@ class Note implements MusicalSymbol {
     this.accidental,
     this.margin = const EdgeInsets.all(10),
     this.color = Colors.black,
+    this.noteHeadColor,
     this.isBeamed = false,
     this.forceStemUp,
     this.beamGroupId = 0,
@@ -81,6 +82,10 @@ class Note implements MusicalSymbol {
 
   /// Tie connection type for this note.
   final TieType? tie;
+
+  /// Optional color for the note head only. When set, stems/beams/flags stay
+  /// at [color] while the note head uses this color.
+  final Color? noteHeadColor;
 
   /// The type of note head based on the note duration.
   NoteHeadType get noteHeadType => noteDuration.noteHeadType;
@@ -462,7 +467,8 @@ class NoteRenderer implements MusicalSymbolRenderer {
   }
 
   void _renderNoteHead(Canvas canvas) {
-    canvas.drawPath(noteHeadRenderPath, Paint()..color = note.color);
+    canvas.drawPath(noteHeadRenderPath,
+        Paint()..color = note.note.noteHeadColor ?? note.color);
   }
 
   void _renderDot(Canvas canvas) {
