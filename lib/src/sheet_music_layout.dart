@@ -96,6 +96,16 @@ class SheetMusicLayout {
     return result;
   }
 
+  int? hitTestSelectableIndex(Offset canvasPosition) {
+    var selectableIndex = 0;
+    for (final staff in staffRenderers) {
+      final hit = staff.hitTestSelectableIndex(canvasPosition, selectableIndex);
+      if (hit != null) return hit;
+      selectableIndex += staff.selectableSymbolCount;
+    }
+    return null;
+  }
+
   /// The sum of the heights of all the staffs.
   double get _staffsHeightsSum => metrics.staffsHeightSum;
 

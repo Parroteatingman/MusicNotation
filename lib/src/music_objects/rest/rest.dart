@@ -131,9 +131,8 @@ class RestRenderer implements MusicalSymbolRenderer {
       Offset(restMetrics.leftMargin, 0) / layout.canvasScale;
 
   @override
-  bool isHit(Offset position) {
-    throw UnimplementedError();
-  }
+  bool isHit(Offset position) =>
+      renderArea.inflate(Constants.staffSpace * 0.6).contains(position);
 
   @override
   void render(Canvas canvas) {

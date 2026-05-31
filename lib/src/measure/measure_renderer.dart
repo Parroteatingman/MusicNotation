@@ -35,6 +35,22 @@ class MeasureRenderer {
     return null;
   }
 
+  int? hitTestSelectableIndex(Offset position, int startIndex) {
+    var selectableIndex = startIndex;
+    for (final object in symbolRenderers) {
+      final isSelectable = object is NoteRenderer || object is RestRenderer;
+      if (isSelectable && object.isHit(position)) {
+        return selectableIndex;
+      }
+      if (isSelectable) selectableIndex++;
+    }
+    return null;
+  }
+
+  int get selectableSymbolCount => symbolRenderers
+      .where((object) => object is NoteRenderer || object is RestRenderer)
+      .length;
+
   /// Renders the measure on the given [canvas] with the specified [size].
   void render(
     Canvas canvas,

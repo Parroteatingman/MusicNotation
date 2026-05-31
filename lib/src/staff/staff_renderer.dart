@@ -35,6 +35,21 @@ class StaffRenderer {
     return null;
   }
 
+  int? hitTestSelectableIndex(Offset position, int startIndex) {
+    var selectableIndex = startIndex;
+    for (final measure in measureRendereres) {
+      final hit = measure.hitTestSelectableIndex(position, selectableIndex);
+      if (hit != null) return hit;
+      selectableIndex += measure.selectableSymbolCount;
+    }
+    return null;
+  }
+
+  int get selectableSymbolCount => measureRendereres.fold<int>(
+        0,
+        (sum, measure) => sum + measure.selectableSymbolCount,
+      );
+
   /// Renders the staff on the given canvas with the specified size and font family.
   void render(Canvas canvas, Size size) {
     final suppressedLeadingTies = <int>{};

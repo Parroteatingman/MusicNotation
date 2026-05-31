@@ -38,6 +38,7 @@ class SimpleSheetMusic extends StatefulWidget {
     this.showFinalBarline = true,
     this.extendStaffToFullWidth = false,
     this.maxCanvasScale,
+    this.onSymbolTap,
   });
 
   /// The list of measures to be displayed.
@@ -72,6 +73,8 @@ class SimpleSheetMusic extends StatefulWidget {
 
   /// If set, caps the canvas scale for consistent sizing across multiple lines.
   final double? maxCanvasScale;
+
+  final ValueChanged<int>? onSymbolTap;
 
   @override
   SimpleSheetMusicState createState() => SimpleSheetMusicState();
@@ -118,6 +121,7 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
       widget.showFinalBarline,
       widget.extendStaffToFullWidth,
       widget.maxCanvasScale,
+      widget.onSymbolTap != null,
       widget.measures.length,
       for (final measure in widget.measures)
         Object.hash(
@@ -183,8 +187,16 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
         try {
           final renderer = _resolveRenderer();
           return GestureDetector(
-            onTap: () {
-              // print('Tapped');
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (details) {
+              final onSymbolTap = widget.onSymbolTap;
+              if (onSymbolTap == null) return;
+              final scale = renderer.sheetMusicLayout.canvasScale;
+              if (scale <= 0) return;
+              final canvasPosition = details.localPosition / scale;
+              final index = renderer.sheetMusicLayout
+                  .hitTestSelectableIndex(canvasPosition);
+              if (index != null) onSymbolTap(index);
             },
             child: RepaintBoundary(
               child: CustomPaint(

@@ -390,7 +390,8 @@ class NoteRenderer implements MusicalSymbolRenderer {
   double get canvasScale => layout.canvasScale;
 
   @override
-  bool isHit(Offset position) => _renderArea.contains(position);
+  bool isHit(Offset position) =>
+      _renderArea.inflate(Constants.staffSpace * 0.45).contains(position);
 
   @override
   void render(Canvas canvas) {
