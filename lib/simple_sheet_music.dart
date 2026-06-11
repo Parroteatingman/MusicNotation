@@ -5,6 +5,7 @@
 library simple_sheet_music;
 
 export '/src/font_types.dart' show FontType;
+export '/src/glyph_path.dart' show GlyphPaths;
 export '/src/measure/measure.dart' show Measure;
 export '/src/music_objects/clef/clef.dart' show Clef;
 export '/src/music_objects/clef/clef_type.dart' show ClefType;
