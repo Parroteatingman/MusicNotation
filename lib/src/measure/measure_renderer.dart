@@ -534,31 +534,40 @@ class MeasureRenderer {
       if (sr is NoteRenderer || sr is RestRenderer) musicRenderers.add(sr);
     }
 
-    // Group consecutive symbols with the same non-null tuplet value
-    List<List<MusicalSymbolRenderer>> tupletGroups = [];
-    List<MusicalSymbolRenderer> currentGroup = [];
+    // Group consecutive symbols with the same non-null tuplet value. Do not
+    // merge adjacent tuplets into one long bracket; a triplet run of six
+    // symbols should draw two separate "3" brackets.
+    final tupletGroups = <List<MusicalSymbolRenderer>>[];
+    final currentGroup = <MusicalSymbolRenderer>[];
     int? currentTuplet;
+
+    void flushCurrentGroup() {
+      if (currentGroup.length >= 2 && currentTuplet != null) {
+        tupletGroups.add(List.of(currentGroup));
+      }
+      currentGroup.clear();
+      currentTuplet = null;
+    }
 
     for (final sr in musicRenderers) {
       final t = _getTuplet(sr);
-      if (t != null && t == currentTuplet) {
-        currentGroup.add(sr);
-      } else {
-        if (currentGroup.length >= 2 && currentTuplet != null) {
-          tupletGroups.add(List.of(currentGroup));
-        }
-        if (t != null) {
-          currentGroup = [sr];
-          currentTuplet = t;
-        } else {
-          currentGroup = [];
-          currentTuplet = null;
-        }
+      if (t == null || t <= 1) {
+        flushCurrentGroup();
+        continue;
+      }
+
+      if (currentGroup.isNotEmpty && t != currentTuplet) {
+        flushCurrentGroup();
+      }
+
+      currentTuplet = t;
+      currentGroup.add(sr);
+
+      if (currentGroup.length >= t) {
+        flushCurrentGroup();
       }
     }
-    if (currentGroup.length >= 2 && currentTuplet != null) {
-      tupletGroups.add(List.of(currentGroup));
-    }
+    flushCurrentGroup();
 
     for (final group in tupletGroups) {
       _drawTupletBracket(canvas, group);
