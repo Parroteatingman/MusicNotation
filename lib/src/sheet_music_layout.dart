@@ -15,6 +15,7 @@ class SheetMusicLayout {
     this.showEndBarline = false,
     this.showFinalBarline = false,
     this.extendStaffToFullWidth = false,
+    this.alignLeft = false,
     this.maxCanvasScale,
   });
 
@@ -37,6 +38,10 @@ class SheetMusicLayout {
   final bool showFinalBarline;
   final bool extendStaffToFullWidth;
 
+  /// When true, content hugs the left edge instead of being horizontally
+  /// centred within the widget width.
+  final bool alignLeft;
+
   /// If set, caps the canvas scale to this value for consistent sizing across lines.
   final double? maxCanvasScale;
 
@@ -55,8 +60,10 @@ class SheetMusicLayout {
   /// The horizontal padding on the canvas.
   double get _horizontalPaddingOnCanvas => _horizontalPadding / canvasScale;
 
-  /// The left padding on the canvas.
-  double get _leftPaddingOnCanvas => _horizontalPaddingOnCanvas / 2;
+  /// The left padding on the canvas. Centres content by default, or hugs the
+  /// left edge when [alignLeft] is set.
+  double get _leftPaddingOnCanvas =>
+      alignLeft ? 0 : _horizontalPaddingOnCanvas / 2;
 
   /// The vertical padding of the sheet music.
   double get _verticalPadding => widgetHeight - _staffsHeightsSum * canvasScale;

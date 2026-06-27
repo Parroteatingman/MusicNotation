@@ -37,6 +37,7 @@ class SimpleSheetMusic extends StatefulWidget {
     this.showEndBarline = true,
     this.showFinalBarline = true,
     this.extendStaffToFullWidth = false,
+    this.alignLeft = false,
     this.maxCanvasScale,
     this.onSymbolTap,
   });
@@ -70,6 +71,9 @@ class SimpleSheetMusic extends StatefulWidget {
   final bool showEndBarline;
   final bool showFinalBarline;
   final bool extendStaffToFullWidth;
+
+  /// When true, content is left-aligned instead of horizontally centred.
+  final bool alignLeft;
 
   /// If set, caps the canvas scale for consistent sizing across multiple lines.
   final double? maxCanvasScale;
@@ -120,6 +124,7 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
       widget.showEndBarline,
       widget.showFinalBarline,
       widget.extendStaffToFullWidth,
+      widget.alignLeft,
       widget.maxCanvasScale,
       widget.onSymbolTap != null,
       widget.measures.length,
@@ -156,6 +161,7 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
       showEndBarline: widget.showEndBarline,
       showFinalBarline: widget.showFinalBarline,
       extendStaffToFullWidth: widget.extendStaffToFullWidth,
+      alignLeft: widget.alignLeft,
       maxCanvasScale: widget.maxCanvasScale,
     );
 
