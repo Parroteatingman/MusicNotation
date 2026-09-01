@@ -75,7 +75,8 @@ class SheetMusicMetrics {
   /// Gets the staff with the maximum width in the sheet music.
   StaffMetrics get _maximumWidthStaff {
     if (staffsMetricses.isEmpty) {
-      throw StateError('No staffs to compute metrics from (empty measures list)');
+      throw StateError(
+          'No staffs to compute metrics from (empty measures list)');
     }
     var result = staffsMetricses.first;
     for (final staff in staffsMetricses) {
@@ -88,6 +89,10 @@ class SheetMusicMetrics {
 
   /// Gets the maximum width of a staff in the sheet music.
   double get maximumStaffWidth => _maximumWidthStaff.width;
+
+  /// Gets the unscaled glyph width of the widest staff, excluding margins.
+  double get maximumStaffObjectsWidth =>
+      staffsMetricses.map((staff) => staff.objectsWidth).max;
 
   double get maximumStaffHorizontalMarginSum =>
       _maximumWidthStaff.horizontalMarginSum;

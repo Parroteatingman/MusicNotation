@@ -20,11 +20,17 @@ class StaffMetrics {
       measuresMetricses.map((measure) => measure.lowerHeight).max;
 
   /// The total width of the staff, including the width of its objects and margins.
-  double get width => _objectsWidth + horizontalMarginSum;
+  double get width => objectsWidth + horizontalMarginSum;
 
   /// The total width of the objects in the staff.
-  double get _objectsWidth =>
+  double get objectsWidth =>
       measuresMetricses.map((measure) => measure.objectsWidth).sum;
+
+  /// The number of symbols laid out across this staff.
+  int get symbolCount => measuresMetricses.fold(
+        0,
+        (sum, measure) => sum + measure.musicalSymbolsMetricses.length,
+      );
 
   /// The sum of the horizontal margins between measures in the staff.
   double get horizontalMarginSum =>
@@ -44,15 +50,24 @@ class StaffMetrics {
     double? staffExtendWidth,
   }) {
     var currentX = leftPadding;
+    final distributedSpacing = layout.distributedSymbolSpacingOnCanvasFor(this);
+    var hasPreviousSymbol = false;
     final measureRendereres = <MeasureRenderer>[];
     for (final measure in measuresMetricses) {
+      final symbolCount = measure.musicalSymbolsMetricses.length;
+      final includeLeadingSpacing = hasPreviousSymbol && symbolCount > 0;
       final m = measure.renderer(
         layout,
         measureInitialX: currentX,
         staffLineCenterY: staffLineCenterY,
+        distributedSymbolSpacingOnCanvas: distributedSpacing,
+        includeLeadingDistributedSpacing: includeLeadingSpacing,
       );
       currentX += m.width;
       measureRendereres.add(m);
+      if (symbolCount > 0) {
+        hasPreviousSymbol = true;
+      }
     }
 
     return StaffRenderer(

@@ -204,13 +204,13 @@ class StaffRenderer {
     );
   }
 
-  /// Extends staff lines to the full width when staffExtendWidth is set.
+  /// Extends staff lines across the full width when staffExtendWidth is set.
   void _renderExtendedStaffLines(Canvas canvas) {
     final first = measureRendereres.first;
-    final last = measureRendereres.last;
-    final contentEndX = last.measureOriginX + last.width;
     final extendTo = staffExtendWidth!;
-    if (extendTo <= contentEndX) return;
+    if (extendTo <= 0) {
+      return;
+    }
 
     final centerY = first.staffLineCenterY;
     final staffLineHeights = [
@@ -222,7 +222,7 @@ class StaffRenderer {
     ];
     for (final h in staffLineHeights) {
       canvas.drawLine(
-        Offset(contentEndX, h),
+        Offset(0, h),
         Offset(extendTo, h),
         Paint()
           ..color = first.layout.lineColor

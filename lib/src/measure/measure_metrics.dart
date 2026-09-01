@@ -75,27 +75,44 @@ class MeasureMetrics {
     SheetMusicLayout layout, {
     required double measureInitialX,
     required double staffLineCenterY,
-  }) =>
-      MeasureRenderer(
-        _symbolRenderers(
-          layout,
-          measureOriginX: measureInitialX,
-          staffLineCenterY: staffLineCenterY,
-        ),
-        this,
+    double distributedSymbolSpacingOnCanvas = 0,
+    bool includeLeadingDistributedSpacing = false,
+  }) {
+    final symbolCount = musicalSymbolsMetricses.length;
+    final distributedGapCount = symbolCount == 0
+        ? 0
+        : symbolCount - 1 + (includeLeadingDistributedSpacing ? 1 : 0);
+    return MeasureRenderer(
+      _symbolRenderers(
         layout,
         measureOriginX: measureInitialX,
         staffLineCenterY: staffLineCenterY,
-      );
+        distributedSymbolSpacingOnCanvas: distributedSymbolSpacingOnCanvas,
+        includeLeadingDistributedSpacing: includeLeadingDistributedSpacing,
+      ),
+      this,
+      layout,
+      measureOriginX: measureInitialX,
+      staffLineCenterY: staffLineCenterY,
+      distributedSpacingWidth:
+          distributedGapCount * distributedSymbolSpacingOnCanvas,
+    );
+  }
 
   List<MusicalSymbolRenderer> _symbolRenderers(
     SheetMusicLayout layout, {
     required double measureOriginX,
     required double staffLineCenterY,
+    required double distributedSymbolSpacingOnCanvas,
+    required bool includeLeadingDistributedSpacing,
   }) {
     final result = <MusicalSymbolRenderer>[];
     var x = measureOriginX;
-    for (final symbol in musicalSymbolsMetricses) {
+    for (var index = 0; index < musicalSymbolsMetricses.length; index++) {
+      if (index > 0 || includeLeadingDistributedSpacing) {
+        x += distributedSymbolSpacingOnCanvas;
+      }
+      final symbol = musicalSymbolsMetricses[index];
       result.add(
         symbol.renderer(
           layout,

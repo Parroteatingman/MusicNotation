@@ -6,6 +6,7 @@ class MockSheetMusicMetrics extends Fake implements SheetMusicMetrics {
     this.staffsHeightSum = 0,
     this.maximumStaffHorizontalMarginSum = 0,
     this.maximumStaffWidth = 0,
+    this.maximumStaffObjectsWidth = 0,
   });
 
   @override
@@ -14,4 +15,6 @@ class MockSheetMusicMetrics extends Fake implements SheetMusicMetrics {
   final double maximumStaffHorizontalMarginSum;
   @override
   final double maximumStaffWidth;
+  @override
+  final double maximumStaffObjectsWidth;
 }

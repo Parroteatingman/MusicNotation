@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:simple_sheet_music/src/sheet_music_metrics.dart';
+import 'package:simple_sheet_music/src/staff/staff_metrics.dart';
 import 'package:simple_sheet_music/src/staff/staff_renderer.dart';
 
 /// Represents the layout of the sheet music.
@@ -16,6 +17,8 @@ class SheetMusicLayout {
     this.showFinalBarline = false,
     this.extendStaffToFullWidth = false,
     this.alignLeft = false,
+    this.distributeSymbolsToFullWidth = false,
+    this.contentHorizontalPadding = 0,
     this.maxCanvasScale,
   });
 
@@ -42,6 +45,12 @@ class SheetMusicLayout {
   /// centred within the widget width.
   final bool alignLeft;
 
+  /// Whether to distribute the remaining width evenly between symbols.
+  final bool distributeSymbolsToFullWidth;
+
+  /// Fixed physical inset for the first and last glyph when distributing.
+  final double contentHorizontalPadding;
+
   /// If set, caps the canvas scale to this value for consistent sizing across lines.
   final double? maxCanvasScale;
 
@@ -62,8 +71,11 @@ class SheetMusicLayout {
 
   /// The left padding on the canvas. Centres content by default, or hugs the
   /// left edge when [alignLeft] is set.
-  double get _leftPaddingOnCanvas =>
-      alignLeft ? 0 : _horizontalPaddingOnCanvas / 2;
+  double get _leftPaddingOnCanvas => distributeSymbolsToFullWidth
+      ? contentHorizontalPadding / canvasScale
+      : alignLeft
+          ? 0
+          : _horizontalPaddingOnCanvas / 2;
 
   /// The vertical padding of the sheet music.
   double get _verticalPadding => widgetHeight - _staffsHeightsSum * canvasScale;
@@ -117,8 +129,12 @@ class SheetMusicLayout {
   double get _staffsHeightsSum => metrics.staffsHeightSum;
 
   /// The scale factor for the width of the sheet music.
-  double get _widthScale =>
-      (widgetWidth - _maximumStaffHorizontalMarginSum) / _maximumStaffWidth;
+  double get _widthScale => distributeSymbolsToFullWidth
+      ? (widgetWidth -
+              contentHorizontalPadding * 2 -
+              _maximumStaffHorizontalMarginSum) /
+          metrics.maximumStaffObjectsWidth
+      : (widgetWidth - _maximumStaffHorizontalMarginSum) / _maximumStaffWidth;
 
   /// The scale factor for the height of the sheet music.
   double get _heightScale => widgetHeight / _staffsHeightsSum;
@@ -133,6 +149,21 @@ class SheetMusicLayout {
       return maxCanvasScale!;
     }
     return natural;
+  }
+
+  /// Returns the extra canvas-space gap needed between adjacent symbols on a
+  /// staff so its first and last glyphs keep fixed physical edge insets.
+  double distributedSymbolSpacingOnCanvasFor(StaffMetrics staff) {
+    if (!distributeSymbolsToFullWidth || staff.symbolCount < 2) {
+      return 0;
+    }
+    final availablePhysicalSpace = widgetWidth -
+        contentHorizontalPadding * 2 -
+        staff.objectsWidth * canvasScale -
+        staff.horizontalMarginSum;
+    return max(0, availablePhysicalSpace) /
+        (staff.symbolCount - 1) /
+        canvasScale;
   }
 
   /// Renders the sheet music on the canvas.

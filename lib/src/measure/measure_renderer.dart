@@ -16,12 +16,14 @@ class MeasureRenderer {
     this.layout, {
     required this.measureOriginX,
     required this.staffLineCenterY,
+    this.distributedSpacingWidth = 0,
   });
 
   final List<MusicalSymbolRenderer> symbolRenderers;
   final MeasureMetrics measureMetrics;
   final double measureOriginX;
   final double staffLineCenterY;
+  final double distributedSpacingWidth;
 
   /// Performs a hit test at the given [position] and returns the corresponding [MusicalSymbolRenderer].
   ///
@@ -514,7 +516,9 @@ class MeasureRenderer {
 
   /// The width of the measure.
   double get width =>
-      measureMetrics.objectsWidth + measureMetrics.horizontalMarginSum / scale;
+      measureMetrics.objectsWidth +
+      measureMetrics.horizontalMarginSum / scale +
+      distributedSpacingWidth;
 
   /// The scale of the measure.
   double get scale => layout.canvasScale;

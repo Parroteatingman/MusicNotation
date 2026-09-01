@@ -38,6 +38,8 @@ class SimpleSheetMusic extends StatefulWidget {
     this.showFinalBarline = true,
     this.extendStaffToFullWidth = false,
     this.alignLeft = false,
+    this.distributeSymbolsToFullWidth = false,
+    this.contentHorizontalPadding = 0,
     this.maxCanvasScale,
     this.onSymbolTap,
   });
@@ -74,6 +76,13 @@ class SimpleSheetMusic extends StatefulWidget {
 
   /// When true, content is left-aligned instead of horizontally centred.
   final bool alignLeft;
+
+  /// Distributes the gaps between symbols so the first and last glyphs sit at
+  /// fixed horizontal insets while preserving their rendered size.
+  final bool distributeSymbolsToFullWidth;
+
+  /// Physical horizontal inset used by [distributeSymbolsToFullWidth].
+  final double contentHorizontalPadding;
 
   /// If set, caps the canvas scale for consistent sizing across multiple lines.
   final double? maxCanvasScale;
@@ -125,6 +134,8 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
       widget.showFinalBarline,
       widget.extendStaffToFullWidth,
       widget.alignLeft,
+      widget.distributeSymbolsToFullWidth,
+      widget.contentHorizontalPadding,
       widget.maxCanvasScale,
       widget.onSymbolTap != null,
       widget.measures.length,
@@ -162,6 +173,8 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
       showFinalBarline: widget.showFinalBarline,
       extendStaffToFullWidth: widget.extendStaffToFullWidth,
       alignLeft: widget.alignLeft,
+      distributeSymbolsToFullWidth: widget.distributeSymbolsToFullWidth,
+      contentHorizontalPadding: widget.contentHorizontalPadding,
       maxCanvasScale: widget.maxCanvasScale,
     );
 
