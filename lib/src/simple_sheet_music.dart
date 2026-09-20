@@ -97,6 +97,44 @@ class SimpleSheetMusic extends StatefulWidget {
 ///
 /// This class manages the state of the SimpleSheetMusic widget and handles the initialization,
 /// font asset loading, and building of the widget.
+/// The font's glyphs and metrics, read and parsed once per font for the
+/// life of the process. The SVG is close to 2 MB, so a page holding a
+/// dozen staffs (a sheet of all twelve keys) used to parse it a dozen
+/// times over and stall while it did.
+class _SheetMusicFont {
+  const _SheetMusicFont(this.glyphPath, this.metadata);
+
+  final GlyphPaths glyphPath;
+  final GlyphMetadata metadata;
+
+  static final Map<FontType, Future<_SheetMusicFont>> _loading = {};
+  static final Map<FontType, _SheetMusicFont> _ready = {};
+
+  /// The parsed font, already there for every staff after the first.
+  static _SheetMusicFont? ready(FontType fontType) => _ready[fontType];
+
+  static Future<_SheetMusicFont> load(FontType fontType) {
+    return _loading.putIfAbsent(fontType, () async {
+      try {
+        final xml = await rootBundle.loadString(fontType.svgPath);
+        final document = XmlDocument.parse(xml);
+        final allGlyphs = document.findAllElements('glyph').toSet();
+        final json = await rootBundle.loadString(fontType.metadataPath);
+        final font = _SheetMusicFont(
+          GlyphPaths(allGlyphs),
+          GlyphMetadata(jsonDecode(json) as Map<String, dynamic>),
+        );
+        _ready[fontType] = font;
+        return font;
+      } catch (_) {
+        // A failed read must not poison later attempts.
+        _loading.removeWhere((key, _) => key == fontType);
+        rethrow;
+      }
+    });
+  }
+}
+
 class SimpleSheetMusicState extends State<SimpleSheetMusic> {
   GlyphPaths? _glyphPath;
   GlyphMetadata? _metadata;
@@ -109,16 +147,22 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
   @override
   void initState() {
     super.initState();
+    // Already parsed: draw on the first frame, with no spinner between.
+    final ready = _SheetMusicFont.ready(fontType);
+    if (ready != null) {
+      _glyphPath = ready.glyphPath;
+      _metadata = ready.metadata;
+    }
     _loadFuture = _load();
   }
 
   Future<void> _load() async {
-    final xml = await rootBundle.loadString(fontType.svgPath);
-    final document = XmlDocument.parse(xml);
-    final allGlyphs = document.findAllElements('glyph').toSet();
-    _glyphPath = GlyphPaths(allGlyphs);
-    final json = await rootBundle.loadString(fontType.metadataPath);
-    _metadata = GlyphMetadata(jsonDecode(json) as Map<String, dynamic>);
+    final font = await _SheetMusicFont.load(fontType);
+    if (!mounted) {
+      return;
+    }
+    _glyphPath = font.glyphPath;
+    _metadata = font.metadata;
   }
 
   Object _buildRenderKey() {
@@ -192,7 +236,8 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
     return FutureBuilder(
       future: _loadFuture,
       builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
+        if (snapshot.connectionState != ConnectionState.done &&
+            (_glyphPath == null || _metadata == null)) {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError || _glyphPath == null || _metadata == null) {
