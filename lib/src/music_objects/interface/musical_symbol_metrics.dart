@@ -19,6 +19,17 @@ abstract class MusicalSymbolMetrics {
   /// The margin around the musical symbol. Vertical margin is not used.
   EdgeInsets get margin;
 
+  /// The musical time this symbol occupies, counted in quarter notes, after
+  /// dots and tuplets are taken into account. Symbols that carry no time —
+  /// clefs, key and time signatures — report 0 and are spaced on their glyph
+  /// width alone.
+  double get durationUnits;
+
+  /// The part of the glyph drawn before the note head — an accidental, mostly.
+  /// It leans into the space the previous note was given, so the spacing model
+  /// hands it room of its own rather than letting it crowd its neighbour.
+  double get leadingWidth;
+
   /// Creates a renderer for the musical symbol.
   ///
   /// The [layout] parameter provides information about the sheet music layout.

@@ -12,6 +12,8 @@ class MockMusicalSymbolMetrics extends Fake implements MusicalSymbolMetrics {
     this.upperHeight = 0,
     this.lowerHeight = 0,
     this.margin = EdgeInsets.zero,
+    this.durationUnits = 0,
+    this.leadingWidth = 0,
   });
   ClefType? get clefType => context?.clefType;
   KeySignatureType? get keySignatureType => context?.keySignatureType;
@@ -24,4 +26,8 @@ class MockMusicalSymbolMetrics extends Fake implements MusicalSymbolMetrics {
   final double lowerHeight;
   @override
   final EdgeInsets margin;
+  @override
+  final double durationUnits;
+  @override
+  final double leadingWidth;
 }

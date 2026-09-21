@@ -47,6 +47,13 @@ class ClefMetrics implements MusicalSymbolMetrics {
   final Clef clef;
 
   @override
+  double get leadingWidth => 0;
+
+  /// A clef holds no musical time; it is spaced on its glyph alone.
+  @override
+  double get durationUnits => 0;
+
+  @override
   double get lowerHeight => bbox.bottom;
 
   @override

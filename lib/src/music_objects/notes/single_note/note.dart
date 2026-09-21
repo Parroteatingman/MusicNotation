@@ -5,6 +5,7 @@ import 'package:simple_sheet_music/src/constants.dart';
 import 'package:simple_sheet_music/src/extension/list_extension.dart';
 import 'package:simple_sheet_music/src/glyph_metadata.dart';
 import 'package:simple_sheet_music/src/glyph_path.dart';
+import 'package:simple_sheet_music/src/layout/note_spacing.dart';
 import 'package:simple_sheet_music/src/music_objects/clef/clef_type.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_metrics.dart';
@@ -119,6 +120,16 @@ class NoteMetrics implements MusicalSymbolMetrics {
 
   // The note object associated with these metrics.
   final Note note;
+
+  @override
+  double get leadingWidth => accidentalWidth;
+
+  @override
+  double get durationUnits => NoteSpacing.unitsOf(
+        note.noteDuration.quarterUnits,
+        isDotted: note.isDotted,
+        tuplet: note.tuplet,
+      );
 
   @override
   double get lowerHeight => bbox.bottom;

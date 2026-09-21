@@ -12,6 +12,8 @@ class StaffRenderer {
     this.showEndBarline = false,
     this.showFinalBarline = false,
     this.staffExtendWidth,
+    this.caretIndex,
+    this.caretColor,
   });
 
   final List<MeasureRenderer> measureRendereres;
@@ -21,6 +23,14 @@ class StaffRenderer {
 
   /// If set, extend staff lines to this width (in canvas coordinates).
   final double? staffExtendWidth;
+
+  /// Where the caret stands on this line, counted in notes and rests: 0 is
+  /// before the first, the count is after the last. Null when the caret is
+  /// on another line.
+  final int? caretIndex;
+
+  /// The colour of the caret.
+  final Color? caretColor;
 
   /// Performs a hit test at the given position on the staff.
   ///
@@ -67,7 +77,9 @@ class StaffRenderer {
     }
 
     // If staffExtendWidth is set, extend staff lines beyond content
-    if (staffExtendWidth != null && measureRendereres.isNotEmpty) {
+    final extendsStaffLines =
+        staffExtendWidth != null && measureRendereres.isNotEmpty;
+    if (extendsStaffLines) {
       _renderExtendedStaffLines(canvas);
     }
     for (int i = 0; i < measureRendereres.length; i++) {
@@ -76,11 +88,13 @@ class StaffRenderer {
         size,
         suppressLeadingTie: suppressedLeadingTies.contains(i),
         suppressTrailingTie: suppressedTrailingTies.contains(i),
+        drawStaffLines: !extendsStaffLines,
       );
     }
     if (showBarlines) _renderBarlines(canvas);
     if (showEndBarline) _renderEndBarline(canvas);
     if (showFinalBarline) _renderFinalBarline(canvas);
+    _renderCaret(canvas);
     for (final tie in crossMeasureTies) {
       _drawCrossMeasureTie(canvas, tie);
     }
@@ -164,7 +178,11 @@ class StaffRenderer {
   void _renderEndBarline(Canvas canvas) {
     if (measureRendereres.isEmpty) return;
     final last = measureRendereres.last;
-    final barlineX = staffExtendWidth ?? (last.measureOriginX + last.width);
+    final thickness = last.measureMetrics.staffLineThickness;
+    // Sit the line inside the staff's right edge; drawn on the edge itself,
+    // half of it falls outside the canvas and it reads as a smudge.
+    final barlineX = (staffExtendWidth ?? (last.measureOriginX + last.width)) -
+        thickness * 0.75;
     final centerY = last.staffLineCenterY;
     final topY = centerY - Constants.staffSpace * 2;
     final bottomY = centerY + Constants.staffSpace * 2;
@@ -173,7 +191,7 @@ class StaffRenderer {
       Offset(barlineX, bottomY),
       Paint()
         ..color = last.layout.lineColor
-        ..strokeWidth = last.measureMetrics.staffLineThickness * 1.5,
+        ..strokeWidth = thickness * 1.5,
     );
   }
 
@@ -201,6 +219,47 @@ class StaffRenderer {
       Paint()
         ..color = last.layout.lineColor
         ..strokeWidth = thickness * 4,
+    );
+  }
+
+  /// Draws the caret: the line the next note will be written at.
+  ///
+  /// The editor knew where the next note would land, and never said. A page
+  /// with a caret on it reads the way a text field does.
+  void _renderCaret(Canvas canvas) {
+    final caretIndex = this.caretIndex;
+    final color = caretColor;
+    if (caretIndex == null || color == null) return;
+    if (measureRendereres.isEmpty) return;
+
+    final xs = <double>[
+      for (final measure in measureRendereres) ...measure.selectableSymbolXs,
+    ];
+
+    final double x;
+    if (caretIndex < xs.length) {
+      // Right where the next symbol's own layout position is: its ink starts
+      // a little after that, so the caret lands in the gap ahead of it rather
+      // than against the note before.
+      x = xs[caretIndex];
+    } else if (xs.isNotEmpty) {
+      // Past the last note on the line.
+      final last = measureRendereres.last;
+      x = last.measureOriginX + last.width - Constants.staffSpace * 0.3;
+    } else {
+      return;
+    }
+
+    final first = measureRendereres.first;
+    final centerY = first.staffLineCenterY;
+    final thickness = first.measureMetrics.staffLineThickness;
+    canvas.drawLine(
+      Offset(x, centerY - Constants.staffSpace * 2.6),
+      Offset(x, centerY + Constants.staffSpace * 2.6),
+      Paint()
+        ..color = color
+        ..strokeWidth = thickness * 2
+        ..strokeCap = StrokeCap.round,
     );
   }
 

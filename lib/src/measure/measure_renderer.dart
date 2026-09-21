@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:simple_sheet_music/src/constants.dart';
 import 'package:simple_sheet_music/src/measure/measure_metrics.dart';
@@ -16,14 +18,15 @@ class MeasureRenderer {
     this.layout, {
     required this.measureOriginX,
     required this.staffLineCenterY,
-    this.distributedSpacingWidth = 0,
+    this.stretch = 1,
   });
 
   final List<MusicalSymbolRenderer> symbolRenderers;
   final MeasureMetrics measureMetrics;
   final double measureOriginX;
   final double staffLineCenterY;
-  final double distributedSpacingWidth;
+  /// How far the symbols of this measure were pulled apart to fill the line.
+  final double stretch;
 
   /// Performs a hit test at the given [position] and returns the corresponding [MusicalSymbolRenderer].
   ///
@@ -49,6 +52,13 @@ class MeasureRenderer {
     return null;
   }
 
+  /// Where each note and rest of this measure begins, in order. The caret
+  /// stands at one of these.
+  List<double> get selectableSymbolXs => [
+        for (final symbol in symbolRenderers)
+          if (symbol is NoteRenderer || symbol is RestRenderer) symbol.symbolX,
+      ];
+
   int get selectableSymbolCount => symbolRenderers
       .where((object) => object is NoteRenderer || object is RestRenderer)
       .length;
@@ -59,8 +69,13 @@ class MeasureRenderer {
     Size size, {
     bool suppressLeadingTie = false,
     bool suppressTrailingTie = false,
+    bool drawStaffLines = true,
   }) {
-    _renderStaffLine(canvas);
+    // The staff draws its own lines right across when it is extended to the
+    // full width; drawing them here as well would lay a second half-opaque
+    // stroke over the part that holds notes, and the line would change shade
+    // where the music stops.
+    if (drawStaffLines) _renderStaffLine(canvas);
     for (final symbol in symbolRenderers) {
       symbol.render(canvas);
     }
@@ -140,96 +155,61 @@ class MeasureRenderer {
   void _drawBeamGroup(Canvas canvas, List<NoteRenderer> group) {
     if (group.length < 2) return;
 
-    final bool stemUp = group.first.note.isStemUp;
-    final beamThickness = measureMetrics.staffLineThickness * 5;
-    final beamGap = beamThickness * 0.8;
-    // Staff space height for constraining beam slope
-    final staffSpace = measureMetrics.staffLineThickness * 4;
+    final metadata = measureMetrics.metadata;
+    final staffSpace = metadata.staffSpace;
+    final beamThickness = metadata.beamThickness;
+    final beamGap = metadata.beamSpacing;
 
-    // Collect stem tip positions for each note
-    final stemTips = <Offset>[];
-    final stemRoots = <Offset>[];
-    for (final nr in group) {
-      stemTips.add(nr.note.stemTipOffset + nr.renderOffset);
-      stemRoots.add(nr.note.stemRootOffset + nr.renderOffset);
-    }
+    // Every note of a beamed group shares one stem direction; the caller has
+    // already settled it, so the first note speaks for the group.
+    final stemUp = group.first.note.isStemUp;
 
-    final firstX = stemTips.first.dx;
-    final lastX = stemTips.last.dx;
+    // Where each stem leaves its note head. Stems are vertical, so these
+    // carry the x of the whole stem as well.
+    final stemRoots = <Offset>[
+      for (final nr in group) nr.note.stemRootOffset + nr.renderOffset,
+    ];
+    final firstX = stemRoots.first.dx;
+    final lastX = stemRoots.last.dx;
     final xSpan = lastX - firstX;
 
-    // Calculate slanted beam line following note movement direction.
-    // Use linear regression on stem root positions (note positions) to
-    // determine the natural slope, then constrain per standard notation rules.
-    double startBeamY, endBeamY;
-
-    if (xSpan < 0.001) {
-      // All notes at same X (shouldn't happen), use flat beam
-      final avgTipY =
-          stemTips.map((o) => o.dy).reduce((a, b) => a + b) / stemTips.length;
-      startBeamY = avgTipY;
-      endBeamY = avgTipY;
-    } else {
-      // Calculate slope from first and last stem root positions
-      final firstRootY = stemRoots.first.dy;
-      final lastRootY = stemRoots.last.dy;
-      double slope = (lastRootY - firstRootY) / xSpan;
-
-      // Constrain slope: max one staff space across the beam span
+    // The beam follows the outer note heads, but never slants more than a
+    // staff space across the group — Gould's rule, and what stops a wide leap
+    // from tipping the beam off the staff.
+    var slope = 0.0;
+    if (xSpan > 0.001) {
+      final natural = (stemRoots.last.dy - stemRoots.first.dy) / xSpan;
       final maxSlope = staffSpace / xSpan;
-      slope = slope.clamp(-maxSlope, maxSlope);
-
-      // Start from average tip Y, then apply slope centered on the group
-      final avgTipY =
-          stemTips.map((o) => o.dy).reduce((a, b) => a + b) / stemTips.length;
-      final midX = (firstX + lastX) / 2;
-      startBeamY = avgTipY + slope * (firstX - midX);
-      endBeamY = avgTipY + slope * (lastX - midX);
-
-      // Ensure beam doesn't cross any stem root
-      if (stemUp) {
-        final margin = group.first.note.note.margin.top;
-        for (int i = 0; i < stemRoots.length; i++) {
-          final t = (stemTips[i].dx - firstX) / xSpan;
-          final beamAtNote = startBeamY + (endBeamY - startBeamY) * t;
-          if (beamAtNote > stemRoots[i].dy - margin) {
-            final shift = beamAtNote - (stemRoots[i].dy - margin);
-            startBeamY -= shift;
-            endBeamY -= shift;
-          }
-        }
-      } else {
-        final margin = group.first.note.note.margin.top;
-        for (int i = 0; i < stemRoots.length; i++) {
-          final t = (stemTips[i].dx - firstX) / xSpan;
-          final beamAtNote = startBeamY + (endBeamY - startBeamY) * t;
-          if (beamAtNote < stemRoots[i].dy + margin) {
-            final shift = (stemRoots[i].dy + margin) - beamAtNote;
-            startBeamY += shift;
-            endBeamY += shift;
-          }
-        }
-      }
+      slope = natural.clamp(-maxSlope, maxSlope).toDouble();
     }
 
-    // Draw stems from root to slanted beam inner edge
+    // Hang the beam off whichever note would otherwise be left with the
+    // shortest stem, so no stem in the group falls under its proper length.
+    final standardStem = metadata.standardStemLength;
+    var beamY = stemUp ? double.infinity : double.negativeInfinity;
+    for (final root in stemRoots) {
+      final wanted = stemUp
+          ? root.dy - standardStem - slope * (root.dx - firstX)
+          : root.dy + standardStem - slope * (root.dx - firstX);
+      beamY = stemUp ? min(beamY, wanted) : max(beamY, wanted);
+    }
+    final startBeamY = beamY;
+    final endBeamY = beamY + slope * xSpan;
+
+    double beamYAtX(double x) => startBeamY + slope * (x - firstX);
+
+    // Stems run from the head to the inner edge of the beam.
     final stemPaint = Paint()
       ..color = group.first.note.color
       ..strokeWidth = group.first.note.stemThickness;
-    for (int i = 0; i < group.length; i++) {
-      final t = xSpan > 0.001 ? (stemTips[i].dx - firstX) / xSpan : 0.0;
-      final beamAtNote = startBeamY + (endBeamY - startBeamY) * t;
+    for (final root in stemRoots) {
+      final beamAtNote = beamYAtX(root.dx);
       final stemEndY = stemUp
           ? beamAtNote + beamThickness / 2
           : beamAtNote - beamThickness / 2;
-      canvas.drawLine(
-        stemRoots[i],
-        Offset(stemTips[i].dx, stemEndY),
-        stemPaint,
-      );
+      canvas.drawLine(root, Offset(root.dx, stemEndY), stemPaint);
     }
 
-    // Draw slanted beam
     final beamPaint = Paint()
       ..color = group.first.note.color
       ..strokeWidth = beamThickness
@@ -240,12 +220,11 @@ class MeasureRenderer {
       beamPaint,
     );
 
-    // Draw secondary beams (double beam for sixteenth notes and shorter)
-    _drawPartialBeams(canvas, group, stemTips, startBeamY, endBeamY, firstX,
+    // Sixteenths and shorter carry further beams, set inside the first one —
+    // that is, on the side the note heads are on.
+    _drawPartialBeams(canvas, group, stemRoots, startBeamY, endBeamY, firstX,
         xSpan, beamThickness, beamGap, beamPaint, stemUp, 1);
-
-    // Draw tertiary beams (triple beam for thirty-second notes and shorter)
-    _drawPartialBeams(canvas, group, stemTips, startBeamY, endBeamY, firstX,
+    _drawPartialBeams(canvas, group, stemRoots, startBeamY, endBeamY, firstX,
         xSpan, beamThickness, beamGap, beamPaint, stemUp, 2);
   }
 
@@ -387,9 +366,11 @@ class MeasureRenderer {
           ? (stemTips[runStart + 1].dx - stemTips[runStart].dx).abs()
           : 0.0;
       final referenceGap = pointRight ? nextGap : previousGap;
-      final partialLen = referenceGap > 0
-          ? (referenceGap * 9.2).clamp(160.0, 272.0).toDouble()
-          : 192.0;
+      // A stub runs a staff space, or half the way to its neighbour when the
+      // notes stand closer than that.
+      final staffSpace = measureMetrics.metadata.staffSpace;
+      final partialLen =
+          referenceGap > 0 ? min(staffSpace, referenceGap / 2) : staffSpace;
       final startX = pointRight ? x : x - partialLen;
       final endX = pointRight ? x + partialLen : x;
       final startY = pointRight ? y : y - beamSlope * partialLen;
@@ -516,9 +497,8 @@ class MeasureRenderer {
 
   /// The width of the measure.
   double get width =>
-      measureMetrics.objectsWidth +
-      measureMetrics.horizontalMarginSum / scale +
-      distributedSpacingWidth;
+      measureMetrics.objectsWidth * stretch +
+      measureMetrics.horizontalMarginSum / scale;
 
   /// The scale of the measure.
   double get scale => layout.canvasScale;
@@ -670,6 +650,9 @@ class MeasureRenderer {
           fontSize: Constants.staffSpace * 0.9,
           fontWeight: FontWeight.bold,
           fontStyle: FontStyle.italic,
+          // Same family as the chord symbols: engraved tuplet numerals are
+          // serif italic, and leaving it null makes widget tests paint a box.
+          fontFamily: 'serif',
         ),
       ),
       textDirection: TextDirection.ltr,

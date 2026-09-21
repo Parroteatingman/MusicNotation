@@ -3,6 +3,7 @@ import 'dart:core';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:simple_sheet_music/src/constants.dart';
 import 'package:simple_sheet_music/src/glyph_metadata.dart';
 import 'package:simple_sheet_music/src/glyph_path.dart';
 import 'package:simple_sheet_music/src/measure/measure.dart';
@@ -42,6 +43,11 @@ class SimpleSheetMusic extends StatefulWidget {
     this.contentHorizontalPadding = 0,
     this.maxCanvasScale,
     this.onSymbolTap,
+    this.onSymbolDragged,
+    this.onSymbolDragEnd,
+    this.justifyLines = true,
+    this.caretIndex,
+    this.caretColor,
   });
 
   /// The list of measures to be displayed.
@@ -88,6 +94,29 @@ class SimpleSheetMusic extends StatefulWidget {
   final double? maxCanvasScale;
 
   final ValueChanged<int>? onSymbolTap;
+
+  /// Called while a symbol is dragged up or down, with how many staff steps
+  /// it has travelled from where the drag began — a step being a line to the
+  /// space next to it, which is what moving a note head by one looks like.
+  ///
+  /// Dragging a note up the staff is how a note's pitch is changed on the
+  /// page rather than through a keypad, so this reports the move in the terms
+  /// the page reads in, and leaves what to do with it to the caller.
+  final void Function(int index, int staffSteps)? onSymbolDragged;
+
+  /// Called when the drag ends, so a caller can close an undo step.
+  final VoidCallback? onSymbolDragEnd;
+
+  /// Pull each line but the last out to the full width. See
+  /// [SheetMusicLayout.justifyLines].
+  final bool justifyLines;
+
+  /// Where the next note will be written, counted in notes and rests. Null
+  /// draws no caret.
+  final int? caretIndex;
+
+  /// The colour of the caret.
+  final Color? caretColor;
 
   @override
   SimpleSheetMusicState createState() => SimpleSheetMusicState();
@@ -142,6 +171,18 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
   Object? _cachedRenderKey;
   SheetMusicRenderer? _cachedRenderer;
 
+  /// The symbol a vertical drag started on, and where it started.
+  int? _dragIndex;
+  double _dragStartY = 0;
+  int _dragSteps = 0;
+
+  /// The symbol drawn under [position], if any.
+  int? _symbolAt(SheetMusicRenderer renderer, Offset position) {
+    final scale = renderer.sheetMusicLayout.canvasScale;
+    if (scale <= 0) return null;
+    return renderer.sheetMusicLayout.hitTestSelectableIndex(position / scale);
+  }
+
   FontType get fontType => widget.fontType;
 
   @override
@@ -182,6 +223,10 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
       widget.contentHorizontalPadding,
       widget.maxCanvasScale,
       widget.onSymbolTap != null,
+      widget.onSymbolDragged != null,
+      widget.justifyLines,
+      widget.caretIndex,
+      widget.caretColor?.toARGB32(),
       widget.measures.length,
       for (final measure in widget.measures)
         Object.hash(
@@ -220,6 +265,9 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
       distributeSymbolsToFullWidth: widget.distributeSymbolsToFullWidth,
       contentHorizontalPadding: widget.contentHorizontalPadding,
       maxCanvasScale: widget.maxCanvasScale,
+      justifyLines: widget.justifyLines,
+      caretIndex: widget.caretIndex,
+      caretColor: widget.caretColor,
     );
 
     _cachedRenderKey = renderKey;
@@ -255,13 +303,51 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
             onTapDown: (details) {
               final onSymbolTap = widget.onSymbolTap;
               if (onSymbolTap == null) return;
-              final scale = renderer.sheetMusicLayout.canvasScale;
-              if (scale <= 0) return;
-              final canvasPosition = details.localPosition / scale;
-              final index = renderer.sheetMusicLayout
-                  .hitTestSelectableIndex(canvasPosition);
+              final index = _symbolAt(renderer, details.localPosition);
               if (index != null) onSymbolTap(index);
             },
+            // Vertical only, so a staff inside a horizontal scroller still
+            // scrolls and a drag on a note still moves the note.
+            //
+            // The note is found on the way down rather than when the drag is
+            // recognised: by then the finger has travelled the slop distance
+            // and has usually left the note head it started on.
+            onVerticalDragDown: widget.onSymbolDragged == null
+                ? null
+                : (details) {
+                    _dragIndex = _symbolAt(renderer, details.localPosition);
+                    _dragStartY = details.localPosition.dy;
+                    _dragSteps = 0;
+                  },
+            onVerticalDragUpdate: widget.onSymbolDragged == null
+                ? null
+                : (details) {
+                    final index = _dragIndex;
+                    if (index == null) return;
+                    final scale = renderer.sheetMusicLayout.canvasScale;
+                    if (scale <= 0) return;
+                    // A staff step is half the gap between two lines.
+                    final stepHeight = Constants.staffSpace * scale / 2;
+                    if (stepHeight <= 0) return;
+                    final steps =
+                        ((_dragStartY - details.localPosition.dy) / stepHeight)
+                            .round();
+                    if (steps == _dragSteps) return;
+                    _dragSteps = steps;
+                    widget.onSymbolDragged!(index, steps);
+                  },
+            onVerticalDragEnd: widget.onSymbolDragged == null
+                ? null
+                : (_) {
+                    if (_dragIndex != null) widget.onSymbolDragEnd?.call();
+                    _dragIndex = null;
+                  },
+            onVerticalDragCancel: widget.onSymbolDragged == null
+                ? null
+                : () {
+                    if (_dragIndex != null) widget.onSymbolDragEnd?.call();
+                    _dragIndex = null;
+                  },
             child: RepaintBoundary(
               child: CustomPaint(
                 size: targetSize,

@@ -33,6 +33,28 @@ class GlyphMetadata {
   double get stemThickness =>
       (engravingDefaults['stemThickness'] as double) * Constants.staffSpace;
 
+  /// The thickness of a beam, as the font's engravers set it (half a staff
+  /// space in Bravura). The renderer used to guess at this.
+  double get beamThickness =>
+      (engravingDefaults['beamThickness'] as double? ?? 0.5) *
+      Constants.staffSpace;
+
+  /// The gap between one beam and the next of a group.
+  double get beamSpacing =>
+      (engravingDefaults['beamSpacing'] as double? ?? 0.25) *
+      Constants.staffSpace;
+
+  /// The distance between two staff lines — the unit every other measurement
+  /// here is expressed in.
+  double get staffSpace => Constants.staffSpace;
+
+  /// How far a stem reaches from its note head when nothing crowds it: an
+  /// octave, which is the length Gould gives as standard.
+  double get standardStemLength => Constants.staffSpace * 3.5;
+
+  /// A stem is never shortened past this, even inside a steep beam group.
+  double get shortestStemLength => Constants.staffSpace * 2.5;
+
   double get minStemLength {
     if (_cache['minStemLength'] != null) {
       return _cache['minStemLength'] as double;

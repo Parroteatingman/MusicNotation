@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:simple_sheet_music/src/constants.dart';
 import 'package:simple_sheet_music/src/glyph_metadata.dart';
 import 'package:simple_sheet_music/src/glyph_path.dart';
+import 'package:simple_sheet_music/src/layout/note_spacing.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_metrics.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_renderer.dart';
@@ -74,6 +75,17 @@ class RestMetrics implements MusicalSymbolMetrics {
 
   Path get path => paths.parsePath(rest.restType.pathKey).shift(defaultOffset);
   Rect get bbox => path.getBounds();
+
+  /// A rest has nothing in front of it.
+  @override
+  double get leadingWidth => 0;
+
+  @override
+  double get durationUnits => NoteSpacing.unitsOf(
+        rest.restType.quarterUnits,
+        isDotted: rest.isDotted,
+        tuplet: rest.tuplet,
+      );
 
   @override
   double get lowerHeight => bbox.bottom;

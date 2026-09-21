@@ -3,6 +3,7 @@ import 'package:simple_sheet_music/src/constants.dart';
 import 'package:simple_sheet_music/src/extension/list_extension.dart';
 import 'package:simple_sheet_music/src/glyph_metadata.dart';
 import 'package:simple_sheet_music/src/glyph_path.dart';
+import 'package:simple_sheet_music/src/layout/note_spacing.dart';
 import 'package:simple_sheet_music/src/music_objects/clef/clef_type.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_metrics.dart';
@@ -166,6 +167,13 @@ class ChordNoteMetrics implements MusicalSymbolMetrics {
 
   /// Gets the width of the note head.
   double get _noteHeadWidth => _noteHeadOriginPath.getBounds().width;
+
+  @override
+  double get leadingWidth => _accidentalsWidthSum;
+
+  @override
+  double get durationUnits =>
+      NoteSpacing.unitsOf(note.noteDuration.quarterUnits);
 
   @override
   double get lowerHeight => _bbox.bottom;

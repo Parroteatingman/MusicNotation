@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:simple_sheet_music/src/extension/list_extension.dart';
 import 'package:simple_sheet_music/src/measure/measure_metrics.dart';
 import 'package:simple_sheet_music/src/measure/measure_renderer.dart';
@@ -32,6 +33,18 @@ class StaffMetrics {
         (sum, measure) => sum + measure.musicalSymbolsMetricses.length,
       );
 
+  /// How many of those symbols are notes and rests — the things a caret can
+  /// stand between and a tap can pick out. Only they carry musical time, so
+  /// that is what separates them from clefs and key signatures.
+  int get selectableSymbolCount => measuresMetricses.fold(
+        0,
+        (sum, measure) =>
+            sum +
+            measure.musicalSymbolsMetricses
+                .where((symbol) => symbol.durationUnits > 0)
+                .length,
+      );
+
   /// The sum of the horizontal margins between measures in the staff.
   double get horizontalMarginSum =>
       measuresMetricses.map((measure) => measure.horizontalMarginSum).sum;
@@ -48,26 +61,21 @@ class StaffMetrics {
     bool showEndBarline = false,
     bool showFinalBarline = false,
     double? staffExtendWidth,
+    double stretch = 1,
+    int? caretIndex,
+    Color? caretColor,
   }) {
     var currentX = leftPadding;
-    final distributedSpacing = layout.distributedSymbolSpacingOnCanvasFor(this);
-    var hasPreviousSymbol = false;
     final measureRendereres = <MeasureRenderer>[];
     for (final measure in measuresMetricses) {
-      final symbolCount = measure.musicalSymbolsMetricses.length;
-      final includeLeadingSpacing = hasPreviousSymbol && symbolCount > 0;
       final m = measure.renderer(
         layout,
         measureInitialX: currentX,
         staffLineCenterY: staffLineCenterY,
-        distributedSymbolSpacingOnCanvas: distributedSpacing,
-        includeLeadingDistributedSpacing: includeLeadingSpacing,
+        stretch: stretch,
       );
       currentX += m.width;
       measureRendereres.add(m);
-      if (symbolCount > 0) {
-        hasPreviousSymbol = true;
-      }
     }
 
     return StaffRenderer(
@@ -76,6 +84,8 @@ class StaffMetrics {
       showEndBarline: showEndBarline,
       showFinalBarline: showFinalBarline,
       staffExtendWidth: staffExtendWidth,
+      caretIndex: caretIndex,
+      caretColor: caretColor,
     );
   }
 }

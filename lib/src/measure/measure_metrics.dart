@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:simple_sheet_music/src/extension/list_extension.dart';
 import 'package:simple_sheet_music/src/glyph_metadata.dart';
+import 'package:simple_sheet_music/src/layout/note_spacing.dart';
 import 'package:simple_sheet_music/src/measure/measure_renderer.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_metrics.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_renderer.dart';
@@ -20,6 +21,7 @@ class MeasureMetrics {
     this.musicalSymbolsMetricses,
     this.metadata, {
     required this.isNewLine,
+    this.spacing = SpacingReference.none,
   });
 
   /// The list of [MusicalSymbolMetrics] representing the metrics of each musical
@@ -32,9 +34,15 @@ class MeasureMetrics {
   /// Indicates whether a line break should occur in this measure.
   final bool isNewLine;
 
-  /// Gets the total width of all the musical symbols in the measure.
+  /// The shortest note on the page, which every symbol's width is measured
+  /// against. See [SpacingReference].
+  final SpacingReference spacing;
+
+  /// Gets the total width claimed by the musical symbols in the measure —
+  /// each symbol's glyph, or the room its note value asks for, whichever is
+  /// wider. See [SpacingReference].
   double get objectsWidth =>
-      musicalSymbolsMetricses.map((symbol) => symbol.width).sum;
+      musicalSymbolsMetricses.map(spacing.advanceOf).sum;
 
   /// Gets the maximum upper height among all the musical symbols in the measure.
   double get _symbolMaximumUpperHeight =>
@@ -75,27 +83,20 @@ class MeasureMetrics {
     SheetMusicLayout layout, {
     required double measureInitialX,
     required double staffLineCenterY,
-    double distributedSymbolSpacingOnCanvas = 0,
-    bool includeLeadingDistributedSpacing = false,
+    double stretch = 1,
   }) {
-    final symbolCount = musicalSymbolsMetricses.length;
-    final distributedGapCount = symbolCount == 0
-        ? 0
-        : symbolCount - 1 + (includeLeadingDistributedSpacing ? 1 : 0);
     return MeasureRenderer(
       _symbolRenderers(
         layout,
         measureOriginX: measureInitialX,
         staffLineCenterY: staffLineCenterY,
-        distributedSymbolSpacingOnCanvas: distributedSymbolSpacingOnCanvas,
-        includeLeadingDistributedSpacing: includeLeadingDistributedSpacing,
+        stretch: stretch,
       ),
       this,
       layout,
       measureOriginX: measureInitialX,
       staffLineCenterY: staffLineCenterY,
-      distributedSpacingWidth:
-          distributedGapCount * distributedSymbolSpacingOnCanvas,
+      stretch: stretch,
     );
   }
 
@@ -103,16 +104,11 @@ class MeasureMetrics {
     SheetMusicLayout layout, {
     required double measureOriginX,
     required double staffLineCenterY,
-    required double distributedSymbolSpacingOnCanvas,
-    required bool includeLeadingDistributedSpacing,
+    required double stretch,
   }) {
     final result = <MusicalSymbolRenderer>[];
     var x = measureOriginX;
-    for (var index = 0; index < musicalSymbolsMetricses.length; index++) {
-      if (index > 0 || includeLeadingDistributedSpacing) {
-        x += distributedSymbolSpacingOnCanvas;
-      }
-      final symbol = musicalSymbolsMetricses[index];
+    for (final symbol in musicalSymbolsMetricses) {
       result.add(
         symbol.renderer(
           layout,
@@ -120,7 +116,11 @@ class MeasureMetrics {
           symbolX: x,
         ),
       );
-      x += symbol.width + symbol.margin.horizontal / layout.canvasScale;
+      // Stretching the width each symbol claims, rather than adding the same
+      // gap everywhere, is what lets a short line fill the page without
+      // flattening the difference between a whole note and a sixteenth.
+      x += spacing.advanceOf(symbol) * stretch +
+          symbol.margin.horizontal / layout.canvasScale;
     }
     return result;
   }

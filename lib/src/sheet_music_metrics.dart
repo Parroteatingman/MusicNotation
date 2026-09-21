@@ -1,10 +1,12 @@
 import 'package:simple_sheet_music/src/extension/list_extension.dart';
 import 'package:simple_sheet_music/src/glyph_metadata.dart';
 import 'package:simple_sheet_music/src/glyph_path.dart';
+import 'package:simple_sheet_music/src/layout/note_spacing.dart';
 import 'package:simple_sheet_music/src/measure/measure.dart';
 import 'package:simple_sheet_music/src/measure/measure_metrics.dart';
 
 import 'package:simple_sheet_music/src/music_objects/clef/clef_type.dart';
+import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_metrics.dart';
 import 'package:simple_sheet_music/src/music_objects/key_signature/keysignature_type.dart';
 import 'package:simple_sheet_music/src/musical_context.dart';
 import 'package:simple_sheet_music/src/staff/staff_metrics.dart';
@@ -26,19 +28,27 @@ class SheetMusicMetrics {
     if (_measuresMetricsesCache != null) {
       return _measuresMetricsesCache!;
     }
-    final result = <MeasureMetrics>[];
+    final symbolsPerMeasure = <List<MusicalSymbolMetrics>>[];
     var context = MusicalContext(initialClefType, initialKeySignatureType);
     for (final measure in measures) {
-      final symbols = measure.setContext(
-        context,
-        metadata,
-        paths,
-      );
+      symbolsPerMeasure.add(measure.setContext(context, metadata, paths));
       context = measure.updateContext(context);
-      final measureMetrics =
-          MeasureMetrics(symbols, metadata, isNewLine: measure.isNewLine);
-      result.add(measureMetrics);
     }
+
+    // Every staff on the page is spaced against the same shortest note, so
+    // note heads keep one size from the first line to the last.
+    final spacing =
+        SpacingReference.of(symbolsPerMeasure.expand((symbols) => symbols));
+
+    final result = <MeasureMetrics>[
+      for (var index = 0; index < measures.length; index++)
+        MeasureMetrics(
+          symbolsPerMeasure[index],
+          metadata,
+          isNewLine: measures[index].isNewLine,
+          spacing: spacing,
+        ),
+    ];
 
     return _measuresMetricsesCache ??= result;
   }

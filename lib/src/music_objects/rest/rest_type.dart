@@ -26,3 +26,28 @@ enum RestType {
   static const _sixtyFourthPathKey = 'uniE4E9';
   static const _hundredTwentyEighthPathKey = 'uniE4EA';
 }
+
+/// The written value of a rest, counted in quarter notes, so rests claim the
+/// same width as the notes they stand in for.
+extension RestTypeUnits on RestType {
+  double get quarterUnits {
+    switch (this) {
+      case RestType.whole:
+        return 4;
+      case RestType.half:
+        return 2;
+      case RestType.quarter:
+        return 1;
+      case RestType.eighth:
+        return 0.5;
+      case RestType.sixteenth:
+        return 0.25;
+      case RestType.thirtySecond:
+        return 0.125;
+      case RestType.sixtyFourth:
+        return 0.0625;
+      case RestType.hundredTwentyEighth:
+        return 0.03125;
+    }
+  }
+}

@@ -98,6 +98,13 @@ class KeySignatureMetrics implements MusicalSymbolMetrics {
   KeySignatureType get keySignatureType => keySignature.keySignatureType;
 
   @override
+  double get leadingWidth => 0;
+
+  /// A key signature holds no musical time; it is spaced on its glyphs.
+  @override
+  double get durationUnits => 0;
+
+  @override
   double get lowerHeight =>
       hasParts ? keySignatureParts.map((e) => e.lowerHeight).max : 0;
 

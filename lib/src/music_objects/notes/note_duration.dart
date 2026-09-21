@@ -73,3 +73,28 @@ enum NoteDuration {
     }
   }
 }
+
+/// The written value of a duration, counted in quarter notes, which is what
+/// the spacing model measures a symbol's claim on the line in.
+extension NoteDurationUnits on NoteDuration {
+  double get quarterUnits {
+    switch (this) {
+      case NoteDuration.whole:
+        return 4;
+      case NoteDuration.half:
+        return 2;
+      case NoteDuration.quarter:
+        return 1;
+      case NoteDuration.eighth:
+        return 0.5;
+      case NoteDuration.sixteenth:
+        return 0.25;
+      case NoteDuration.thirtySecond:
+        return 0.125;
+      case NoteDuration.sixtyFourth:
+        return 0.0625;
+      case NoteDuration.hundredsTwentyEighth:
+        return 0.03125;
+    }
+  }
+}
