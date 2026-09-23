@@ -213,8 +213,13 @@ class ChordNoteMetrics implements MusicalSymbolMetrics {
   @override
   double get upperHeight => -_bbox.top;
 
+  /// The bounding box already runs from the first accidental to the last
+  /// note head, so the accidentals are not added again: counting them twice
+  /// made a chord with a sharp the widest thing on the page, and the spacing
+  /// model, which measures every note against the widest of the shortest
+  /// value, then spread a run of whole notes after it far apart.
   @override
-  double get width => _accidentalsWidthSum + _bbox.width;
+  double get width => _bbox.width;
 
   /// Gets the list of bounding boxes for all the note heads.
   List<Rect> get _noteHeadsBboxes =>
