@@ -586,11 +586,15 @@ class MeasureRenderer {
     if (group.isEmpty) return;
     final tupletNumber = _getTuplet(group.first) ?? 3;
 
-    // Determine stem direction from the first note in the group
+    // Determine stem direction from the first note in the group. The
+    // bracket and its number take that note's colour, as its beam does, so
+    // they still show on a dark staff.
     bool stemUp = true;
+    Color ink = Colors.black;
     for (final sr in group) {
       if (sr is NoteRenderer) {
         stemUp = sr.note.isStemUp;
+        ink = sr.note.color;
         break;
       }
     }
@@ -628,7 +632,7 @@ class MeasureRenderer {
     }
 
     final bracketPaint = Paint()
-      ..color = Colors.black
+      ..color = ink
       ..strokeWidth = measureMetrics.staffLineThickness * 2
       ..style = PaintingStyle.stroke;
 
@@ -646,7 +650,7 @@ class MeasureRenderer {
       text: TextSpan(
         text: '$tupletNumber',
         style: TextStyle(
-          color: Colors.black,
+          color: ink,
           fontSize: Constants.staffSpace * 0.9,
           fontWeight: FontWeight.bold,
           fontStyle: FontStyle.italic,

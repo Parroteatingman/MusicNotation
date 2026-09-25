@@ -21,6 +21,7 @@ class Rest implements MusicalSymbol {
     this.isDotted = false,
     this.tuplet,
     this.chordLabel,
+    this.chordLabelColor = Colors.black,
   });
 
   @override
@@ -39,6 +40,10 @@ class Rest implements MusicalSymbol {
 
   /// Optional chord label displayed above the rest.
   final String? chordLabel;
+
+  /// The colour of [chordLabel], so a staff on a dark surface can draw the
+  /// symbol in its own light ink.
+  final Color chordLabelColor;
 
   @override
   MusicalSymbolMetrics setContext(
@@ -175,7 +180,7 @@ class RestRenderer implements MusicalSymbolRenderer {
       text: TextSpan(
         text: root,
         style: TextStyle(
-          color: Colors.black,
+          color: restMetrics.rest.chordLabelColor,
           fontSize: rootFontSize,
           fontWeight: FontWeight.bold,
           fontFamily: 'serif',
@@ -190,7 +195,7 @@ class RestRenderer implements MusicalSymbolRenderer {
         text: TextSpan(
           text: suffix,
           style: TextStyle(
-            color: Colors.black,
+            color: restMetrics.rest.chordLabelColor,
             fontSize: suffixFontSize,
             fontWeight: FontWeight.bold,
             fontFamily: 'serif',

@@ -36,6 +36,7 @@ class Note implements MusicalSymbol {
     this.beamGroupId = 0,
     this.beatPosition = 0.0,
     this.chordLabel,
+    this.chordLabelColor = Colors.black,
     this.isDotted = false,
     this.tuplet,
     this.tie,
@@ -74,6 +75,11 @@ class Note implements MusicalSymbol {
 
   /// Optional chord label to display above this note (e.g., "Dm7", "G7").
   final String? chordLabel;
+
+  /// The colour of [chordLabel]. Separate from [color] so a highlighted note
+  /// doesn't recolour its chord symbol, and a staff on a dark surface can
+  /// draw the symbols in its own light ink.
+  final Color chordLabelColor;
 
   /// Whether this note has a dot (extends duration by 50%).
   final bool isDotted;
@@ -440,7 +446,7 @@ class NoteRenderer implements MusicalSymbolRenderer {
       text: TextSpan(
         text: root,
         style: TextStyle(
-          color: Colors.black,
+          color: note.note.chordLabelColor,
           fontSize: rootFontSize,
           fontWeight: FontWeight.bold,
           fontFamily: 'serif',
@@ -461,7 +467,7 @@ class NoteRenderer implements MusicalSymbolRenderer {
         text: TextSpan(
           text: suffix,
           style: TextStyle(
-            color: Colors.black,
+            color: note.note.chordLabelColor,
             fontSize: suffixFontSize,
             fontWeight: FontWeight.bold,
             fontFamily: 'serif',
