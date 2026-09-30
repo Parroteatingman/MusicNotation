@@ -5,6 +5,7 @@ import 'package:simple_sheet_music/src/constants.dart';
 import 'package:simple_sheet_music/src/measure/barline.dart';
 import 'package:simple_sheet_music/src/measure/measure_metrics.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_renderer.dart';
+import 'package:simple_sheet_music/src/music_objects/notes/chord_note/chord_note.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/note_duration.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/single_note/note.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/tie_type.dart';
@@ -112,30 +113,28 @@ class MeasureRenderer {
 
   /// Draws beams connecting consecutive beamed notes.
   void _renderBeams(Canvas canvas) {
-    final noteRenderers = <NoteRenderer>[];
-    final noteIndices = <int>[];
-    for (int i = 0; i < symbolRenderers.length; i++) {
-      if (symbolRenderers[i] is NoteRenderer) {
-        noteRenderers.add(symbolRenderers[i] as NoteRenderer);
-        noteIndices.add(i);
-      }
+    for (final group in _beamGroups()) {
+      _drawBeamGroup(canvas, group);
     }
+  }
 
-    // Find groups of consecutive beamed notes, split by beamGroupId
-    List<List<NoteRenderer>> groups = [];
-    List<NoteRenderer> currentGroup = [];
+  /// The runs of consecutive beamed notes, split by beamGroupId.
+  List<List<NoteRenderer>> _beamGroups() {
+    final groups = <List<NoteRenderer>>[];
+    final currentGroup = <NoteRenderer>[];
     int currentGroupId = -1;
 
-    for (final nr in noteRenderers) {
-      if (nr.note.note.isBeamed) {
-        final gid = nr.note.note.beamGroupId;
+    for (final symbol in symbolRenderers) {
+      if (symbol is! NoteRenderer) continue;
+      if (symbol.note.note.isBeamed) {
+        final gid = symbol.note.note.beamGroupId;
         if (currentGroup.isNotEmpty && gid != currentGroupId) {
           if (currentGroup.length >= 2) {
             groups.add(List.of(currentGroup));
           }
           currentGroup.clear();
         }
-        currentGroup.add(nr);
+        currentGroup.add(symbol);
         currentGroupId = gid;
       } else {
         if (currentGroup.length >= 2) {
@@ -148,19 +147,13 @@ class MeasureRenderer {
     if (currentGroup.length >= 2) {
       groups.add(List.of(currentGroup));
     }
-
-    for (final group in groups) {
-      _drawBeamGroup(canvas, group);
-    }
+    return groups;
   }
 
-  void _drawBeamGroup(Canvas canvas, List<NoteRenderer> group) {
-    if (group.length < 2) return;
-
+  /// Where a beamed group's beam lies.
+  _BeamLine _beamLineOf(List<NoteRenderer> group) {
     final metadata = measureMetrics.metadata;
     final staffSpace = metadata.staffSpace;
-    final beamThickness = metadata.beamThickness;
-    final beamGap = metadata.beamSpacing;
 
     // Every note of a beamed group shares one stem direction; the caller has
     // already settled it, so the first note speaks for the group.
@@ -172,8 +165,7 @@ class MeasureRenderer {
       for (final nr in group) nr.note.stemRootOffset + nr.renderOffset,
     ];
     final firstX = stemRoots.first.dx;
-    final lastX = stemRoots.last.dx;
-    final xSpan = lastX - firstX;
+    final xSpan = stemRoots.last.dx - firstX;
 
     // The beam follows the outer note heads, but never slants more than a
     // staff space across the group — Gould's rule, and what stops a wide leap
@@ -195,10 +187,31 @@ class MeasureRenderer {
           : root.dy + standardStem - slope * (root.dx - firstX);
       beamY = stemUp ? min(beamY, wanted) : max(beamY, wanted);
     }
-    final startBeamY = beamY;
-    final endBeamY = beamY + slope * xSpan;
+    return _BeamLine(
+      stemUp: stemUp,
+      stemRoots: stemRoots,
+      startY: beamY,
+      slope: slope,
+    );
+  }
 
-    double beamYAtX(double x) => startBeamY + slope * (x - firstX);
+  void _drawBeamGroup(Canvas canvas, List<NoteRenderer> group) {
+    if (group.length < 2) return;
+
+    final metadata = measureMetrics.metadata;
+    final beamThickness = metadata.beamThickness;
+    final beamGap = metadata.beamSpacing;
+
+    final beam = _beamLineOf(group);
+    final stemUp = beam.stemUp;
+    final stemRoots = beam.stemRoots;
+    final firstX = beam.firstX;
+    final lastX = beam.lastX;
+    final xSpan = lastX - firstX;
+    final startBeamY = beam.startY;
+    final endBeamY = beam.endY;
+
+    double beamYAtX(double x) => beam.yAt(x);
 
     // Stems run from the head to the inner edge of the beam.
     final stemPaint = Paint()
@@ -523,6 +536,13 @@ class MeasureRenderer {
 
   /// Renders tuplet brackets (e.g., triplet "3") above/below note/rest groups.
   void _renderTupletBrackets(Canvas canvas) {
+    for (final group in _tupletGroups()) {
+      _drawTupletBracket(canvas, group);
+    }
+  }
+
+  /// The runs of notes and rests under one tuplet bracket.
+  List<List<MusicalSymbolRenderer>> _tupletGroups() {
     // Collect only note/rest renderers (skip clef, key sig, etc.)
     final musicRenderers = <MusicalSymbolRenderer>[];
     for (final sr in symbolRenderers) {
@@ -563,10 +583,82 @@ class MeasureRenderer {
       }
     }
     flushCurrentGroup();
+    return tupletGroups;
+  }
 
-    for (final group in tupletGroups) {
-      _drawTupletBracket(canvas, group);
+  /// Which side of a tuplet group its bracket goes, and at what height:
+  /// beyond the stem tips (or the rests), on the stem side of the first note.
+  _BracketPlace _tupletBracketPlace(List<MusicalSymbolRenderer> group) {
+    var stemUp = true;
+    for (final sr in group) {
+      if (sr is NoteRenderer) {
+        stemUp = sr.note.isStemUp;
+        break;
+      }
     }
+    if (stemUp) {
+      double minY = double.infinity;
+      for (final sr in group) {
+        if (sr is NoteRenderer) {
+          final tipY = sr.note.stemTipOffset.dy + sr.renderOffset.dy;
+          if (tipY < minY) minY = tipY;
+        } else if (sr is RestRenderer) {
+          final topY = sr.renderArea.top;
+          if (topY < minY) minY = topY;
+        }
+      }
+      return _BracketPlace(stemUp: true, y: minY - Constants.staffSpace * 0.8);
+    }
+    double maxY = double.negativeInfinity;
+    for (final sr in group) {
+      if (sr is NoteRenderer) {
+        final tipY = sr.note.stemTipOffset.dy + sr.renderOffset.dy;
+        if (tipY > maxY) maxY = tipY;
+      } else if (sr is RestRenderer) {
+        final botY = sr.renderArea.bottom;
+        if (botY > maxY) maxY = botY;
+      }
+    }
+    return _BracketPlace(stemUp: false, y: maxY + Constants.staffSpace * 0.8);
+  }
+
+  /// How far down each of [symbolRenderers] reaches, in canvas units: the
+  /// symbol itself with its stem and flag, the beam under it, the tuplet
+  /// bracket under it. Anything written under the notes starts below this.
+  List<double> symbolInkBottoms() {
+    final bottoms = <double>[
+      for (final symbol in symbolRenderers)
+        if (symbol is NoteRenderer)
+          symbol.staffLineCenterY + symbol.note.lowerHeight
+        else if (symbol is ChordNoteRenderer)
+          symbol.staffLineCenterY + symbol.note.lowerHeight
+        else if (symbol is RestRenderer)
+          symbol.renderArea.bottom
+        else
+          double.negativeInfinity,
+    ];
+    void lower(MusicalSymbolRenderer symbol, double y) {
+      final i = symbolRenderers.indexOf(symbol);
+      if (i >= 0 && y > bottoms[i]) bottoms[i] = y;
+    }
+
+    final beamThickness = measureMetrics.metadata.beamThickness;
+    for (final group in _beamGroups()) {
+      final beam = _beamLineOf(group);
+      if (beam.stemUp) continue;
+      for (var i = 0; i < group.length; i++) {
+        lower(group[i], beam.yAt(beam.stemRoots[i].dx) + beamThickness / 2);
+      }
+    }
+    for (final group in _tupletGroups()) {
+      final place = _tupletBracketPlace(group);
+      if (place.stemUp) continue;
+      for (final symbol in group) {
+        // The bracket's number hangs about half a space either side of it.
+        lower(symbol, place.y + Constants.staffSpace * 0.55);
+      }
+    }
+    return bottoms;
   }
 
   /// Get the left X of a symbol renderer for bracket drawing.
@@ -597,50 +689,22 @@ class MeasureRenderer {
     if (group.isEmpty) return;
     final tupletNumber = _getTuplet(group.first) ?? 3;
 
-    // Determine stem direction from the first note in the group. The
-    // bracket and its number take that note's colour, as its beam does, so
-    // they still show on a dark staff.
-    bool stemUp = true;
+    // The bracket and its number take the first note's colour, as its beam
+    // does, so they still show on a dark staff.
     Color ink = Colors.black;
     for (final sr in group) {
       if (sr is NoteRenderer) {
-        stemUp = sr.note.isStemUp;
         ink = sr.note.color;
         break;
       }
     }
+    final place = _tupletBracketPlace(group);
+    final stemUp = place.stemUp;
+    final bracketY = place.y;
 
     final firstX = _getSymbolLeftX(group.first);
     final lastX = _getSymbolRightX(group.last);
     final centerX = (firstX + lastX) / 2;
-
-    // Calculate bracket Y position
-    double bracketY;
-    if (stemUp) {
-      double minY = double.infinity;
-      for (final sr in group) {
-        if (sr is NoteRenderer) {
-          final tipY = sr.note.stemTipOffset.dy + sr.renderOffset.dy;
-          if (tipY < minY) minY = tipY;
-        } else if (sr is RestRenderer) {
-          final topY = sr.renderArea.top;
-          if (topY < minY) minY = topY;
-        }
-      }
-      bracketY = minY - Constants.staffSpace * 0.8;
-    } else {
-      double maxY = double.negativeInfinity;
-      for (final sr in group) {
-        if (sr is NoteRenderer) {
-          final tipY = sr.note.stemTipOffset.dy + sr.renderOffset.dy;
-          if (tipY > maxY) maxY = tipY;
-        } else if (sr is RestRenderer) {
-          final botY = sr.renderArea.bottom;
-          if (botY > maxY) maxY = botY;
-        }
-      }
-      bracketY = maxY + Constants.staffSpace * 0.8;
-    }
 
     final bracketPaint = Paint()
       ..color = ink
@@ -689,4 +753,36 @@ class MeasureRenderer {
           Offset(lastX, bracketY), bracketPaint);
     }
   }
+}
+
+/// Where a beamed group's beam lies: the side its stems go, where each stem
+/// leaves its head, and the line of the beam.
+class _BeamLine {
+  const _BeamLine({
+    required this.stemUp,
+    required this.stemRoots,
+    required this.startY,
+    required this.slope,
+  });
+
+  final bool stemUp;
+  final List<Offset> stemRoots;
+  final double startY;
+  final double slope;
+
+  double get firstX => stemRoots.first.dx;
+  double get lastX => stemRoots.last.dx;
+
+  /// The beam's middle at [x].
+  double yAt(double x) => startY + slope * (x - firstX);
+
+  double get endY => yAt(lastX);
+}
+
+/// Which side of its notes a tuplet bracket goes, and at what height.
+class _BracketPlace {
+  const _BracketPlace({required this.stemUp, required this.y});
+
+  final bool stemUp;
+  final double y;
 }

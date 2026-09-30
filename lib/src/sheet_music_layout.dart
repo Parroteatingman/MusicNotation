@@ -213,7 +213,9 @@ class SheetMusicLayout {
       final staffTop = (centerY - Constants.staffSpace * 2) * scale;
       final staffBottom = (centerY + Constants.staffSpace * 2) * scale;
       for (final measure in staffs[line].measureRendereres) {
-        for (final symbol in measure.symbolRenderers) {
+        final inks = measure.symbolInkBottoms();
+        for (var i = 0; i < measure.symbolRenderers.length; i++) {
+          final symbol = measure.symbolRenderers[i];
           SheetSymbolKind kind;
           List<Path> heads;
           if (symbol is NoteRenderer) {
@@ -229,13 +231,20 @@ class SheetMusicLayout {
             continue;
           }
           if (heads.isEmpty) continue;
+          final drawn = [for (final head in heads) head.transform(toWidget)];
+          var inkBottom = inks[i] * scale;
+          for (final head in drawn) {
+            final bottom = head.getBounds().bottom;
+            if (bottom > inkBottom) inkBottom = bottom;
+          }
           boxes.add(SheetSymbolBox(
             order: order++,
             line: line,
             kind: kind,
-            heads: [for (final head in heads) head.transform(toWidget)],
+            heads: drawn,
             staffTop: staffTop,
             staffBottom: staffBottom,
+            inkBottom: inkBottom,
           ));
         }
       }
@@ -284,11 +293,15 @@ class SheetMusicLayout {
     final fixed = spreadOnlyNotes ? staff.fixedWidth : 0.0;
     final content = staff.objectsWidth - fixed;
     if (content <= 0) return 1;
-    final available = (widgetWidth -
-                contentHorizontalPadding * 2 -
-                staff.horizontalMarginSum) /
-            canvasScale -
-        fixed;
+    // A line is pulled out to the same margin on the right as it starts
+    // from on the left. When the page is drawn at the size its height allows
+    // and centred, that is the widest line's width, not the page's: pulled
+    // out to the page's width from a centred start, a line ran off the right.
+    final leftPadding = _leftPaddingOnCanvas * canvasScale;
+    final available =
+        (widgetWidth - leftPadding * 2 - staff.horizontalMarginSum) /
+                canvasScale -
+            fixed;
     if (available <= content) return 1;
     return min(_maxStretch, available / content);
   }

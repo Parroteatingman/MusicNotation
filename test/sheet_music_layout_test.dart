@@ -35,6 +35,7 @@ void main() {
       bool distributeSymbolsToFullWidth = false,
       bool justifyLines = true,
       bool spreadOnlyNotes = false,
+      bool alignLeft = true,
     }) =>
         SheetMusicLayout(
           MockSheetMusicMetrics(
@@ -48,6 +49,7 @@ void main() {
           distributeSymbolsToFullWidth: distributeSymbolsToFullWidth,
           justifyLines: justifyLines,
           spreadOnlyNotes: spreadOnlyNotes,
+          alignLeft: alignLeft,
           maxCanvasScale: 1,
         );
 
@@ -57,6 +59,16 @@ void main() {
       final layout = layoutOf();
       expect(layout.canvasScale, 1);
       expect(layout.stretchFor(staff, isLast: false), closeTo(100 / 40, 1e-9));
+    });
+
+    test('a centred page pulls a line out to its widest line, no further',
+        () {
+      // Drawn at a capped size, the page is 40 wide in a 100 wide widget and
+      // starts 30 in. Pulled out to 100 from there, a line ran off the right.
+      final layout = layoutOf(alignLeft: false);
+      expect(layout.stretchFor(staff, isLast: false), 1);
+      final narrow = _FakeStaffMetrics(objectsWidth: 20, symbolCount: 4);
+      expect(layout.stretchFor(narrow, isLast: false), closeTo(2, 1e-9));
     });
 
     test('the last line keeps its natural width', () {

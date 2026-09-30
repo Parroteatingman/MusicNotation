@@ -17,6 +17,7 @@ class SheetSymbolBox {
     required this.heads,
     required this.staffTop,
     required this.staffBottom,
+    required this.inkBottom,
   });
 
   /// The symbol's place among the page's notes, rests and chords, from 0.
@@ -36,6 +37,11 @@ class SheetSymbolBox {
   /// The top and the bottom line of the symbol's staff.
   final double staffTop;
   final double staffBottom;
+
+  /// How far down the symbol's ink reaches: its stem and flag, the beam
+  /// under it, a tuplet bracket under it. Anything written under the note
+  /// starts below this.
+  final double inkBottom;
 
   /// Around all the heads.
   Rect get headBounds {
