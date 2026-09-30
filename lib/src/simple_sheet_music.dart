@@ -286,7 +286,13 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done &&
             (_glyphPath == null || _metadata == null)) {
-          return const Center(child: CircularProgressIndicator());
+          // The music font is still loading: the stave's space, empty — no
+          // spinner.
+          return SizedBox(
+            key: const ValueKey('simple-sheet-music-loading'),
+            width: widget.width,
+            height: widget.height,
+          );
         }
         if (snapshot.hasError || _glyphPath == null || _metadata == null) {
           return Center(
