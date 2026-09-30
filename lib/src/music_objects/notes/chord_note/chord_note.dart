@@ -486,6 +486,10 @@ class ChordNoteRenderer implements MusicalSymbolRenderer {
 
   Rect get _renderArea => throw UnimplementedError();
 
+  /// The heads as they are drawn, one for each note of the chord.
+  List<Path> get noteHeadRenderPaths =>
+      [for (final path in note.noteHeadsPaths) path.shift(_renderOffset)];
+
   void _renderAccidentals(Canvas canvas) {
     for (final accidental in note.accidentalMetricses) {
       canvas.drawPath(

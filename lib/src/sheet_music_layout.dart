@@ -2,7 +2,12 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:simple_sheet_music/src/constants.dart';
+import 'package:simple_sheet_music/src/music_objects/notes/chord_note/chord_note.dart';
+import 'package:simple_sheet_music/src/music_objects/notes/single_note/note.dart';
+import 'package:simple_sheet_music/src/music_objects/rest/rest.dart';
 import 'package:simple_sheet_music/src/sheet_music_metrics.dart';
+import 'package:simple_sheet_music/src/sheet_symbol_box.dart';
 import 'package:simple_sheet_music/src/staff/staff_metrics.dart';
 import 'package:simple_sheet_music/src/staff/staff_renderer.dart';
 
@@ -25,7 +30,13 @@ class SheetMusicLayout {
     this.spreadOnlyNotes = false,
     this.caretIndex,
     this.caretColor,
+    this.spaceBelowStaff = 0,
   });
+
+  /// Room kept under every staff, in canvas units, on top of what its own
+  /// notes need: where a caller writes under the notes (see
+  /// [symbolBoxes]).
+  final double spaceBelowStaff;
 
   /// The height of the widget.
   final double widgetHeight;
@@ -143,7 +154,7 @@ class SheetMusicLayout {
         caretColor: caretColor,
       );
       symbolsBefore += staffRenderer.selectableSymbolCount;
-      currentY += staffMetrics.lowerHeight;
+      currentY += staffMetrics.lowerHeight + spaceBelowStaff;
       result.add(staffRenderer);
     }
     return result;
@@ -179,8 +190,59 @@ class SheetMusicLayout {
     return null;
   }
 
-  /// The sum of the heights of all the staffs.
-  double get _staffsHeightsSum => metrics.staffsHeightSum;
+  /// The sum of the heights of all the staffs, with the room kept under
+  /// each.
+  double get _staffsHeightsSum => spaceBelowStaff == 0
+      ? metrics.staffsHeightSum
+      : metrics.staffsHeightSum +
+          spaceBelowStaff * metrics.staffsMetricses.length;
+
+  /// Every note, rest and chord where it is drawn, in the widget's
+  /// coordinates (the canvas is only scaled, never moved), with the lines
+  /// of its staff.
+  List<SheetSymbolBox> symbolBoxes() {
+    final scale = canvasScale;
+    final toWidget = Matrix4.diagonal3Values(scale, scale, 1).storage;
+    final staffs = staffRenderers;
+    final staffMetricses = metrics.staffsMetricses.toList();
+    final boxes = <SheetSymbolBox>[];
+    var centerY = _upperPaddingOnCanvas;
+    var order = 0;
+    for (var line = 0; line < staffs.length; line++) {
+      centerY += staffMetricses[line].upperHeight;
+      final staffTop = (centerY - Constants.staffSpace * 2) * scale;
+      final staffBottom = (centerY + Constants.staffSpace * 2) * scale;
+      for (final measure in staffs[line].measureRendereres) {
+        for (final symbol in measure.symbolRenderers) {
+          SheetSymbolKind kind;
+          List<Path> heads;
+          if (symbol is NoteRenderer) {
+            kind = SheetSymbolKind.note;
+            heads = [symbol.noteHeadRenderPath];
+          } else if (symbol is ChordNoteRenderer) {
+            kind = SheetSymbolKind.chord;
+            heads = symbol.noteHeadRenderPaths;
+          } else if (symbol is RestRenderer) {
+            kind = SheetSymbolKind.rest;
+            heads = [symbol.renderPath];
+          } else {
+            continue;
+          }
+          if (heads.isEmpty) continue;
+          boxes.add(SheetSymbolBox(
+            order: order++,
+            line: line,
+            kind: kind,
+            heads: [for (final head in heads) head.transform(toWidget)],
+            staffTop: staffTop,
+            staffBottom: staffBottom,
+          ));
+        }
+      }
+      centerY += staffMetricses[line].lowerHeight + spaceBelowStaff;
+    }
+    return boxes;
+  }
 
   /// The scale factor for the width of the sheet music.
   double get _widthScale => distributeSymbolsToFullWidth

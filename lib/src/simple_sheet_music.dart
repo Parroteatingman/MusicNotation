@@ -10,6 +10,7 @@ import 'package:simple_sheet_music/src/measure/measure.dart';
 import 'package:simple_sheet_music/src/music_objects/clef/clef_type.dart';
 import 'package:simple_sheet_music/src/sheet_music_metrics.dart';
 import 'package:simple_sheet_music/src/sheet_music_renderer.dart';
+import 'package:simple_sheet_music/src/sheet_symbol_box.dart';
 import 'package:xml/xml.dart';
 
 import 'font_types.dart';
@@ -49,6 +50,8 @@ class SimpleSheetMusic extends StatefulWidget {
     this.spreadOnlyNotes = false,
     this.caretIndex,
     this.caretColor,
+    this.spaceBelowStaff = 0,
+    this.onLayout,
   });
 
   /// The list of measures to be displayed.
@@ -124,6 +127,16 @@ class SimpleSheetMusic extends StatefulWidget {
   /// The colour of the caret.
   final Color? caretColor;
 
+  /// Room kept under every staff, in staff spaces, for whatever the caller
+  /// writes under the notes. The staff scales down to make room, the way it
+  /// does for a low note.
+  final double spaceBelowStaff;
+
+  /// Where every note, rest and chord was drawn, in this widget's
+  /// coordinates. Called after the frame that first draws a layout, and
+  /// again whenever the layout changes — never for a repaint alone.
+  final ValueChanged<List<SheetSymbolBox>>? onLayout;
+
   @override
   SimpleSheetMusicState createState() => SimpleSheetMusicState();
 }
@@ -176,6 +189,9 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
   Future<void>? _loadFuture;
   Object? _cachedRenderKey;
   SheetMusicRenderer? _cachedRenderer;
+
+  /// The layout last reported through [SimpleSheetMusic.onLayout].
+  Object? _reportedRenderKey;
 
   /// The symbol a vertical drag started on, and where it started.
   int? _dragIndex;
@@ -234,6 +250,7 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
       widget.spreadOnlyNotes,
       widget.caretIndex,
       widget.caretColor?.toARGB32(),
+      widget.spaceBelowStaff,
       widget.measures.length,
       for (final measure in widget.measures)
         Object.hash(
@@ -278,6 +295,7 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
       spreadOnlyNotes: widget.spreadOnlyNotes,
       caretIndex: widget.caretIndex,
       caretColor: widget.caretColor,
+      spaceBelowStaff: widget.spaceBelowStaff * Constants.staffSpace,
     );
 
     _cachedRenderKey = renderKey;
@@ -286,6 +304,19 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
       repaintKey: renderKey,
     );
     return _cachedRenderer!;
+  }
+
+  /// Tells [SimpleSheetMusic.onLayout] where the symbols are, once per
+  /// layout, after the frame that draws it.
+  void _reportLayout(SheetMusicRenderer renderer) {
+    if (widget.onLayout == null) return;
+    final key = _cachedRenderKey;
+    if (key == null || key == _reportedRenderKey) return;
+    _reportedRenderKey = key;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _cachedRenderKey != key) return;
+      widget.onLayout?.call(renderer.sheetMusicLayout.symbolBoxes());
+    });
   }
 
   @override
@@ -314,6 +345,7 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
         }
         try {
           final renderer = _resolveRenderer();
+          _reportLayout(renderer);
           return GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTapDown: (details) {
