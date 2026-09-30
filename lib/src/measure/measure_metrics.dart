@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:simple_sheet_music/src/extension/list_extension.dart';
 import 'package:simple_sheet_music/src/glyph_metadata.dart';
 import 'package:simple_sheet_music/src/layout/note_spacing.dart';
+import 'package:simple_sheet_music/src/measure/barline.dart';
 import 'package:simple_sheet_music/src/measure/measure_renderer.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_metrics.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_renderer.dart';
@@ -22,7 +23,11 @@ class MeasureMetrics {
     this.metadata, {
     required this.isNewLine,
     this.spacing = SpacingReference.none,
+    this.endBarline,
   });
+
+  /// How the measure ends; null leaves it to the staff.
+  final BarlineType? endBarline;
 
   /// The list of [MusicalSymbolMetrics] representing the metrics of each musical
   /// symbol in the measure.
@@ -41,8 +46,15 @@ class MeasureMetrics {
   /// Gets the total width claimed by the musical symbols in the measure —
   /// each symbol's glyph, or the room its note value asks for, whichever is
   /// wider. See [SpacingReference].
-  double get objectsWidth =>
-      musicalSymbolsMetricses.map(spacing.advanceOf).sum;
+  double get objectsWidth => musicalSymbolsMetricses.map(spacing.advanceOf).sum;
+
+  /// The part of [objectsWidth] held by symbols that carry no time — clefs,
+  /// key and time signatures, barlines — which a layout may keep at their
+  /// own width when it spreads a line (see [SheetMusicLayout.spreadOnlyNotes]).
+  double get fixedWidth => musicalSymbolsMetricses
+      .where((symbol) => symbol.durationUnits <= 0)
+      .map(spacing.advanceOf)
+      .sum;
 
   /// Gets the maximum upper height among all the musical symbols in the measure.
   double get _symbolMaximumUpperHeight =>
@@ -119,7 +131,9 @@ class MeasureMetrics {
       // Stretching the width each symbol claims, rather than adding the same
       // gap everywhere, is what lets a short line fill the page without
       // flattening the difference between a whole note and a sixteenth.
-      x += spacing.advanceOf(symbol) * stretch +
+      final spread =
+          layout.spreadOnlyNotes && symbol.durationUnits <= 0 ? 1 : stretch;
+      x += spacing.advanceOf(symbol) * spread +
           symbol.margin.horizontal / layout.canvasScale;
     }
     return result;

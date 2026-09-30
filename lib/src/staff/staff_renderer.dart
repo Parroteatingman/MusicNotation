@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:simple_sheet_music/src/constants.dart';
+import 'package:simple_sheet_music/src/measure/barline.dart';
 import 'package:simple_sheet_music/src/measure/measure_renderer.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_renderer.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/single_note/note.dart';
@@ -91,9 +92,16 @@ class StaffRenderer {
         drawStaffLines: !extendsStaffLines,
       );
     }
-    if (showBarlines) _renderBarlines(canvas);
-    if (showEndBarline) _renderEndBarline(canvas);
-    if (showFinalBarline) _renderFinalBarline(canvas);
+    _renderBarlines(canvas);
+    final lastType = measureRendereres.isEmpty
+        ? null
+        : measureRendereres.last.measureMetrics.endBarline;
+    if (lastType != null) {
+      _renderTypedEndBarline(canvas, lastType);
+    } else {
+      if (showEndBarline) _renderEndBarline(canvas);
+      if (showFinalBarline) _renderFinalBarline(canvas);
+    }
     _renderCaret(canvas);
     for (final tie in crossMeasureTies) {
       _drawCrossMeasureTie(canvas, tie);
@@ -153,7 +161,8 @@ class StaffRenderer {
     canvas.drawPath(path, tiePaint);
   }
 
-  /// Draws vertical barlines between measures.
+  /// Draws vertical barlines between measures: the plain line when
+  /// [showBarlines] is set, and whatever a measure asks for either way.
   void _renderBarlines(Canvas canvas) {
     if (measureRendereres.length < 2) return;
 
@@ -163,6 +172,21 @@ class StaffRenderer {
       final centerY = measure.staffLineCenterY;
       final topY = centerY - Constants.staffSpace * 2;
       final bottomY = centerY + Constants.staffSpace * 2;
+      final type = measure.measureMetrics.endBarline;
+      final repeatNext = measureRendereres[i + 1].startsWithRepeat;
+      if (type != null && type != BarlineType.single) {
+        BarlinePainter(measure.measureMetrics.staffLineThickness).end(
+          canvas,
+          measure.layout.lineColor,
+          type,
+          barlineX,
+          centerY,
+          shareThick: type == BarlineType.repeatEnd && repeatNext,
+        );
+        continue;
+      }
+      // the next measure's ‖: stands on this barline
+      if (!showBarlines || repeatNext) continue;
 
       canvas.drawLine(
         Offset(barlineX, topY),
@@ -172,6 +196,18 @@ class StaffRenderer {
           ..strokeWidth = measure.measureMetrics.staffLineThickness * 1.5,
       );
     }
+  }
+
+  /// The barline the staff's last measure asks for, at the staff's end.
+  void _renderTypedEndBarline(Canvas canvas, BarlineType type) {
+    final last = measureRendereres.last;
+    BarlinePainter(last.measureMetrics.staffLineThickness).end(
+      canvas,
+      last.layout.lineColor,
+      type,
+      staffExtendWidth ?? (last.measureOriginX + last.width),
+      last.staffLineCenterY,
+    );
   }
 
   /// Draws a single thin barline at the end of the staff.

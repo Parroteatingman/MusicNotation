@@ -47,6 +47,7 @@ class SheetMusicMetrics {
           metadata,
           isNewLine: measures[index].isNewLine,
           spacing: spacing,
+          endBarline: measures[index].endBarline,
         ),
     ];
 

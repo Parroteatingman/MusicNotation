@@ -2,6 +2,7 @@ import 'dart:core';
 
 import 'package:simple_sheet_music/src/glyph_metadata.dart';
 import 'package:simple_sheet_music/src/glyph_path.dart';
+import 'package:simple_sheet_music/src/measure/barline.dart';
 import 'package:simple_sheet_music/src/music_objects/clef/clef.dart';
 import 'package:simple_sheet_music/src/music_objects/clef/clef_type.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol.dart';
@@ -22,6 +23,8 @@ class Measure {
   const Measure(
     this.musicalSymbols, {
     this.isNewLine = false,
+    this.startRepeat = false,
+    this.endBarline,
   }) : assert(musicalSymbols.length != 0);
 
   /// The list of musical symbols that make up the measure.
@@ -29,6 +32,14 @@ class Measure {
 
   /// Indicates whether the measure is a new line in the sheet music.
   final bool isNewLine;
+
+  /// The measure opens with `‖:`, set after any clef, key and time signature
+  /// it starts with.
+  final bool startRepeat;
+
+  /// How the measure ends. Null keeps the staff's own barline: a thin line
+  /// between measures and whatever the staff ends with.
+  final BarlineType? endBarline;
 
   /// Sets the context for the measure and returns a list of musical symbol metrics.
   ///
@@ -48,6 +59,19 @@ class Measure {
       final symbolMetrics = symbol.setContext(symbolContext, metadata, paths);
       symbolContext = symbolContext.update(symbol);
       result.add(symbolMetrics);
+    }
+    // Barlines are set like symbols, so the notes make room for them.
+    final painter = BarlinePainter(metadata.staffLineThickness);
+    if (startRepeat) {
+      final firstNote = result.indexWhere((symbol) => symbol.durationUnits > 0);
+      result.insert(
+        firstNote < 0 ? result.length : firstNote,
+        RepeatStartMetrics(painter),
+      );
+    }
+    final end = endBarline;
+    if (end != null && painter.roomFor(end) > 0) {
+      result.add(BarlineRoomMetrics(painter.roomFor(end)));
     }
     return result;
   }

@@ -22,6 +22,7 @@ class SheetMusicLayout {
     this.contentHorizontalPadding = 0,
     this.maxCanvasScale,
     this.justifyLines = true,
+    this.spreadOnlyNotes = false,
     this.caretIndex,
     this.caretColor,
   });
@@ -62,6 +63,12 @@ class SheetMusicLayout {
   /// justifies every system but the final one. A short middle line with a
   /// ragged right edge reads as a mistake.
   final bool justifyLines;
+
+  /// When a line is pulled out, pull only its notes and rests apart. A clef,
+  /// a key or time signature or a barline spread along with them opens a hole
+  /// the width of the signature beside it; an engraver sets them at their own
+  /// width and gives the room to the music.
+  final bool spreadOnlyNotes;
 
   /// Where the next note will be written, counted in notes and rests across
   /// the whole page. Null draws no caret.
@@ -212,12 +219,14 @@ class SheetMusicLayout {
     final justify = distributeSymbolsToFullWidth || (justifyLines && !isLast);
     if (!justify || staff.symbolCount < 2) return 1;
 
-    final content = staff.objectsWidth;
+    final fixed = spreadOnlyNotes ? staff.fixedWidth : 0.0;
+    final content = staff.objectsWidth - fixed;
     if (content <= 0) return 1;
     final available = (widgetWidth -
-            contentHorizontalPadding * 2 -
-            staff.horizontalMarginSum) /
-        canvasScale;
+                contentHorizontalPadding * 2 -
+                staff.horizontalMarginSum) /
+            canvasScale -
+        fixed;
     if (available <= content) return 1;
     return min(_maxStretch, available / content);
   }

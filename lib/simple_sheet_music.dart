@@ -6,6 +6,7 @@ library simple_sheet_music;
 
 export '/src/font_types.dart' show FontType;
 export '/src/glyph_path.dart' show GlyphPaths;
+export '/src/measure/barline.dart' show BarlineType;
 export '/src/measure/measure.dart' show Measure;
 export '/src/music_objects/clef/clef.dart' show Clef;
 export '/src/music_objects/clef/clef_type.dart' show ClefType;
@@ -23,5 +24,7 @@ export 'src/music_objects/notes/single_note/note.dart' show Note;
 // export 'src/music_objects/notes/stem_direction.dart' show StemDirection;
 export 'src/music_objects/interface/musical_symbol.dart' show MusicalSymbol;
 export 'src/music_objects/rest/rest.dart' show Rest;
+export 'src/music_objects/time_signature/time_signature.dart'
+    show TimeSignature, TimeSignatureSymbol;
 export 'src/music_objects/rest/rest_type.dart' show RestType;
 export 'src/music_objects/notes/tie_type.dart' show TieType;

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:simple_sheet_music/src/glyph_metadata.dart';
 import 'package:simple_sheet_music/src/glyph_path.dart';
+import 'package:simple_sheet_music/src/measure/barline.dart';
 import 'package:simple_sheet_music/src/measure/measure.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_metrics.dart';
 import 'package:simple_sheet_music/src/musical_context.dart';
@@ -10,6 +11,12 @@ class MockMeasure extends Fake implements Measure {
 
   @override
   final bool isNewLine;
+
+  @override
+  bool get startRepeat => false;
+
+  @override
+  BarlineType? get endBarline => null;
 
   @override
   List<MusicalSymbolMetrics> setContext(

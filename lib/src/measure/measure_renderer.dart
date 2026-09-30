@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:simple_sheet_music/src/constants.dart';
+import 'package:simple_sheet_music/src/measure/barline.dart';
 import 'package:simple_sheet_music/src/measure/measure_metrics.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_renderer.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/note_duration.dart';
@@ -25,6 +26,7 @@ class MeasureRenderer {
   final MeasureMetrics measureMetrics;
   final double measureOriginX;
   final double staffLineCenterY;
+
   /// How far the symbols of this measure were pulled apart to fill the line.
   final double stretch;
 
@@ -396,6 +398,12 @@ class MeasureRenderer {
     return notes;
   }
 
+  /// The measure opens with `‖:` right on its barline — nothing set before
+  /// it — so the `‖:` is that barline.
+  bool get startsWithRepeat =>
+      symbolRenderers.isNotEmpty &&
+      symbolRenderers.first is RepeatStartRenderer;
+
   NoteRenderer? get firstNoteRenderer {
     for (final symbol in symbolRenderers) {
       if (symbol is NoteRenderer) return symbol;
@@ -496,9 +504,12 @@ class MeasureRenderer {
   final SheetMusicLayout layout;
 
   /// The width of the measure.
-  double get width =>
-      measureMetrics.objectsWidth * stretch +
-      measureMetrics.horizontalMarginSum / scale;
+  double get width {
+    final fixed = layout.spreadOnlyNotes ? measureMetrics.fixedWidth : 0.0;
+    return fixed +
+        (measureMetrics.objectsWidth - fixed) * stretch +
+        measureMetrics.horizontalMarginSum / scale;
+  }
 
   /// The scale of the measure.
   double get scale => layout.canvasScale;

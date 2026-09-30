@@ -34,6 +34,7 @@ void main() {
     SheetMusicLayout layoutOf({
       bool distributeSymbolsToFullWidth = false,
       bool justifyLines = true,
+      bool spreadOnlyNotes = false,
     }) =>
         SheetMusicLayout(
           MockSheetMusicMetrics(
@@ -46,6 +47,7 @@ void main() {
           widgetWidth: 100,
           distributeSymbolsToFullWidth: distributeSymbolsToFullWidth,
           justifyLines: justifyLines,
+          spreadOnlyNotes: spreadOnlyNotes,
           maxCanvasScale: 1,
         );
 
@@ -80,6 +82,20 @@ void main() {
       expect(layoutOf().stretchFor(lonely, isLast: false), 1);
     });
 
+    test('signatures and barlines can keep their width while notes spread', () {
+      // 20 of the 60 are a clef, a key signature and a barline
+      final signed =
+          _FakeStaffMetrics(objectsWidth: 60, symbolCount: 6, fixedWidth: 20);
+      expect(
+        layoutOf(spreadOnlyNotes: true).stretchFor(signed, isLast: false),
+        closeTo((100 - 20) / 40, 1e-9),
+      );
+      expect(
+        layoutOf().stretchFor(signed, isLast: false),
+        closeTo(100 / 60, 1e-9),
+      );
+    });
+
     test('a line already wider than the page is not squeezed', () {
       final full = _FakeStaffMetrics(objectsWidth: 400, symbolCount: 8);
       expect(layoutOf().stretchFor(full, isLast: false), 1);
@@ -88,13 +104,20 @@ void main() {
 }
 
 class _FakeStaffMetrics extends Fake implements StaffMetrics {
-  _FakeStaffMetrics({required this.objectsWidth, required this.symbolCount});
+  _FakeStaffMetrics({
+    required this.objectsWidth,
+    required this.symbolCount,
+    this.fixedWidth = 0,
+  });
 
   @override
   final double objectsWidth;
 
   @override
   final int symbolCount;
+
+  @override
+  final double fixedWidth;
 
   @override
   double get horizontalMarginSum => 0;

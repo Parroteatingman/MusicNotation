@@ -27,6 +27,10 @@ class StaffMetrics {
   double get objectsWidth =>
       measuresMetricses.map((measure) => measure.objectsWidth).sum;
 
+  /// The part of [objectsWidth] held by symbols that carry no time.
+  double get fixedWidth =>
+      measuresMetricses.map((measure) => measure.fixedWidth).sum;
+
   /// The number of symbols laid out across this staff.
   int get symbolCount => measuresMetricses.fold(
         0,
