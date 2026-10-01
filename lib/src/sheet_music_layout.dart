@@ -208,25 +208,31 @@ class SheetMusicLayout {
     final boxes = <SheetSymbolBox>[];
     var centerY = _upperPaddingOnCanvas;
     var order = 0;
+    var measureIndex = 0;
     for (var line = 0; line < staffs.length; line++) {
       centerY += staffMetricses[line].upperHeight;
       final staffTop = (centerY - Constants.staffSpace * 2) * scale;
       final staffBottom = (centerY + Constants.staffSpace * 2) * scale;
       for (final measure in staffs[line].measureRendereres) {
         final inks = measure.symbolInkBottoms();
+        final measureLeft = measure.measureOriginX * scale;
+        final measureRight = (measure.measureOriginX + measure.width) * scale;
         for (var i = 0; i < measure.symbolRenderers.length; i++) {
           final symbol = measure.symbolRenderers[i];
           SheetSymbolKind kind;
           List<Path> heads;
+          Rect? label;
           if (symbol is NoteRenderer) {
             kind = SheetSymbolKind.note;
             heads = [symbol.noteHeadRenderPath];
+            label = symbol.chordLabelRect;
           } else if (symbol is ChordNoteRenderer) {
             kind = SheetSymbolKind.chord;
             heads = symbol.noteHeadRenderPaths;
           } else if (symbol is RestRenderer) {
             kind = SheetSymbolKind.rest;
             heads = [symbol.renderPath];
+            label = symbol.chordLabelRect;
           } else {
             continue;
           }
@@ -245,8 +251,15 @@ class SheetMusicLayout {
             staffTop: staffTop,
             staffBottom: staffBottom,
             inkBottom: inkBottom,
+            measure: measureIndex,
+            measureLeft: measureLeft,
+            measureRight: measureRight,
+            chordLabel: label == null
+                ? null
+                : Rect.fromLTRB(label.left * scale, label.top * scale, label.right * scale, label.bottom * scale),
           ));
         }
+        measureIndex++;
       }
       centerY += staffMetricses[line].lowerHeight + spaceBelowStaff;
     }

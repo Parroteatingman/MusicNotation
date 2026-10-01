@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:simple_sheet_music/src/chord_label.dart';
 import 'package:simple_sheet_music/src/constants.dart';
 import 'package:simple_sheet_music/src/extension/list_extension.dart';
 import 'package:simple_sheet_music/src/glyph_metadata.dart';
@@ -420,6 +421,10 @@ class NoteRenderer implements MusicalSymbolRenderer {
     _renderStem(canvas);
     _renderLegerLine(canvas);
   }
+
+  /// Around the chord name drawn over the note, in canvas units.
+  Rect? get chordLabelRect => chordLabelRect_(note.note.chordLabel,
+      x: symbolX + note.margin.left / canvasScale, staffLineCenterY: staffLineCenterY);
 
   void _renderChordLabel(Canvas canvas) {
     final label = note.note.chordLabel;

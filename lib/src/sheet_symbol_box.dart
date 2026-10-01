@@ -18,6 +18,10 @@ class SheetSymbolBox {
     required this.staffTop,
     required this.staffBottom,
     required this.inkBottom,
+    this.measure = -1,
+    this.measureLeft = 0,
+    this.measureRight = 0,
+    this.chordLabel,
   });
 
   /// The symbol's place among the page's notes, rests and chords, from 0.
@@ -42,6 +46,18 @@ class SheetSymbolBox {
   /// under it, a tuplet bracket under it. Anything written under the note
   /// starts below this.
   final double inkBottom;
+
+  /// The measure the symbol is in, counted from 0 across the page.
+  final int measure;
+
+  /// Where that measure starts and ends across the page — barline to
+  /// barline as drawn — so a caller can tint a bar, or line it up with
+  /// something drawn beside the staff.
+  final double measureLeft;
+  final double measureRight;
+
+  /// Around the chord name written over the symbol, if any.
+  final Rect? chordLabel;
 
   /// Around all the heads.
   Rect get headBounds {
