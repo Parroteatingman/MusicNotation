@@ -28,6 +28,7 @@ class SheetMusicLayout {
     this.maxCanvasScale,
     this.justifyLines = true,
     this.spreadOnlyNotes = false,
+    this.minStretch = 1,
     this.caretIndex,
     this.caretColor,
     this.spaceBelowStaff = 0,
@@ -80,6 +81,14 @@ class SheetMusicLayout {
   /// the width of the signature beside it; an engraver sets them at their own
   /// width and gives the room to the music.
   final bool spreadOnlyNotes;
+
+  /// How far a line too long for the page may have its notes pulled
+  /// together before the whole page is drawn smaller: 0.75 lets the room
+  /// each note claims shrink to three quarters. 1 (the default) never
+  /// squeezes — a long line makes the page smaller. A caller that keeps a
+  /// fixed number of bars to a line, at one size, squeezes the busy lines
+  /// rather than shrinking their notes.
+  final double minStretch;
 
   /// Where the next note will be written, counted in notes and rests across
   /// the whole page. Null draws no caret.
@@ -271,8 +280,21 @@ class SheetMusicLayout {
       ? (widgetWidth -
               contentHorizontalPadding * 2 -
               _maximumStaffHorizontalMarginSum) /
-          metrics.maximumStaffObjectsWidth
-      : (widgetWidth - _maximumStaffHorizontalMarginSum) / _maximumStaffWidth;
+          _squeezed(metrics.maximumStaffObjectsWidth)
+      : (widgetWidth - _maximumStaffHorizontalMarginSum) /
+          _squeezed(_maximumStaffWidth,
+              margins: _maximumStaffHorizontalMarginSum);
+
+  /// [width] as it would be with every line's notes pulled together as far
+  /// as [minStretch] allows: the widest line, squeezed, is what has to fit.
+  double _squeezed(double width, {double margins = 0}) {
+    if (minStretch >= 1) return width;
+    final squeezed = metrics.staffsMetricses.map((staff) {
+      final fixed = spreadOnlyNotes ? staff.fixedWidth : 0.0;
+      return fixed + (staff.objectsWidth - fixed) * minStretch;
+    }).reduce(max);
+    return squeezed + margins;
+  }
 
   /// The scale factor for the height of the sheet music.
   double get _heightScale => widgetHeight / _staffsHeightsSum;
@@ -315,7 +337,11 @@ class SheetMusicLayout {
         (widgetWidth - leftPadding * 2 - staff.horizontalMarginSum) /
                 canvasScale -
             fixed;
-    if (available <= content) return 1;
+    if (available <= content) {
+      // Too long for the page: squeezed as far as allowed (the page was
+      // drawn small enough for the squeezed line to fit).
+      return minStretch >= 1 ? 1 : max(minStretch, available / content);
+    }
     return min(_maxStretch, available / content);
   }
 

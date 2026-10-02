@@ -113,6 +113,56 @@ void main() {
       expect(layoutOf().stretchFor(full, isLast: false), 1);
     });
   });
+
+  group('squeezing', () {
+    // 20 of a line's width are its clef and barlines; the notes claim the
+    // rest. The page is 100 wide and drawn at most at scale 1.
+    SheetMusicLayout layoutOf(double objectsWidth, {double minStretch = 0.7}) {
+      final staff = _FakeStaffMetrics(
+        objectsWidth: objectsWidth,
+        symbolCount: 8,
+        fixedWidth: 20,
+      );
+      return SheetMusicLayout(
+        MockSheetMusicMetrics(
+          maximumStaffWidth: objectsWidth,
+          maximumStaffObjectsWidth: objectsWidth,
+          staffsHeightSum: 1,
+          staffsMetricses: [staff],
+        ),
+        Colors.black,
+        widgetHeight: 100,
+        widgetWidth: 100,
+        distributeSymbolsToFullWidth: true,
+        spreadOnlyNotes: true,
+        maxCanvasScale: 1,
+        minStretch: minStretch,
+      );
+    }
+
+    test('a busy line keeps its size and pulls its notes together', () {
+      // Notes claim 100; 80 is left for them.
+      final layout = layoutOf(120);
+      expect(layout.canvasScale, 1);
+      final staff = layout.metrics.staffsMetricses.single;
+      expect(layout.stretchFor(staff, isLast: true), closeTo(0.8, 1e-9));
+    });
+
+    test('past the squeeze allowed, the page is drawn smaller', () {
+      // Squeezed to 0.7 the line is 20 + 200 * 0.7 = 160 wide.
+      final layout = layoutOf(220);
+      expect(layout.canvasScale, closeTo(100 / 160, 1e-9));
+      final staff = layout.metrics.staffsMetricses.single;
+      expect(layout.stretchFor(staff, isLast: true), closeTo(0.7, 1e-9));
+    });
+
+    test('without a squeeze a busy line makes the page smaller', () {
+      final layout = layoutOf(120, minStretch: 1);
+      expect(layout.canvasScale, closeTo(100 / 120, 1e-9));
+      final staff = layout.metrics.staffsMetricses.single;
+      expect(layout.stretchFor(staff, isLast: true), 1);
+    });
+  });
 }
 
 class _FakeStaffMetrics extends Fake implements StaffMetrics {

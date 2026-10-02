@@ -48,6 +48,7 @@ class SimpleSheetMusic extends StatefulWidget {
     this.onSymbolDragEnd,
     this.justifyLines = true,
     this.spreadOnlyNotes = false,
+    this.minStretch = 1,
     this.caretIndex,
     this.caretColor,
     this.spaceBelowStaff = 0,
@@ -119,6 +120,9 @@ class SimpleSheetMusic extends StatefulWidget {
   /// clefs, key and time signatures and barlines keep their own width. See
   /// [SheetMusicLayout.spreadOnlyNotes].
   final bool spreadOnlyNotes;
+
+  /// See [SheetMusicLayout.minStretch].
+  final double minStretch;
 
   /// Where the next note will be written, counted in notes and rests. Null
   /// draws no caret.
@@ -248,6 +252,7 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
       widget.onSymbolDragged != null,
       widget.justifyLines,
       widget.spreadOnlyNotes,
+      widget.minStretch,
       widget.caretIndex,
       widget.caretColor?.toARGB32(),
       widget.spaceBelowStaff,
@@ -293,6 +298,7 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
       maxCanvasScale: widget.maxCanvasScale,
       justifyLines: widget.justifyLines,
       spreadOnlyNotes: widget.spreadOnlyNotes,
+      minStretch: widget.minStretch,
       caretIndex: widget.caretIndex,
       caretColor: widget.caretColor,
       spaceBelowStaff: widget.spaceBelowStaff * Constants.staffSpace,
