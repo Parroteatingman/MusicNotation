@@ -12,7 +12,6 @@ import 'package:simple_sheet_music/src/music_objects/notes/chord_note/accidental
 import 'package:simple_sheet_music/src/music_objects/notes/chord_note/chord_note_part.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/legerline.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/note_duration.dart';
-import 'package:simple_sheet_music/src/music_objects/notes/note_pitch.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/noteflag_type.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/notehead_type.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/positions.dart';
@@ -81,9 +80,16 @@ class ChordNoteMetrics implements MusicalSymbolMetrics {
 
   List<ChordNotePart> get _noteParts => note.noteParts;
 
-  List<ChordNoteHeadMetrics> get _noteHeads => _noteParts
-      .map((part) => ChordNoteHeadMetrics(_noteHeadPath(part), part))
-      .toList();
+  List<ChordNoteHeadMetrics> get _noteHeads {
+    final displaced = _displacedHeads;
+    return [
+      for (var i = 0; i < _noteParts.length; i++)
+        ChordNoteHeadMetrics(
+          _noteHeadPath(_noteParts[i], displaced: displaced[i]),
+          _noteParts[i],
+        ),
+    ];
+  }
 
   /// thickness of the leger lines.
   double get legerLineThickness => metadata.legerLineThickness;
@@ -92,11 +98,56 @@ class ChordNoteMetrics implements MusicalSymbolMetrics {
   double get legerLineExtension => metadata.legerLineExtension;
 
   /// path of the note head for a specific [ChordNotePart].
-  Path _noteHeadPath(ChordNotePart part) {
-    final noteHeadLeftX = _getNoteHeadLeftX(part);
+  Path _noteHeadPath(ChordNotePart part, {required bool displaced}) {
+    final noteHeadLeftX =
+        displaced ? _displacedColumnLeftX : _normalColumnLeftX;
     return _noteHeadOriginPath
         .shift(Offset(noteHeadLeftX, 0) + _positionOffset(part));
   }
+
+  /// Which heads sit on the far side of the stem, one flag per note part.
+  ///
+  /// The engraving rule for seconds (Gould, *Behind Bars*; Read; the
+  /// Wikipedia "Stem (music)" article): the two notes of a second can't share
+  /// a column, so one of them goes to the other side of the stem. Most heads
+  /// stay on the stem's normal side — left of an up-stem, right of a
+  /// down-stem. Walking the chord from the stem's root end (from the bottom
+  /// for an up-stem, from the top for a down-stem), a head a step from the
+  /// head before it is displaced unless that one already was, so a run of
+  /// seconds alternates sides: G B C D E stem up is G B D on the left, C E on
+  /// the right. Stemless notes (whole notes) follow the up-stem pattern.
+  List<bool> get _displacedHeads {
+    final count = _noteParts.length;
+    final positions = [
+      for (final part in _noteParts) _getNotePosition(part).localPosition,
+    ];
+    final order = List<int>.generate(count, (i) => i)
+      ..sort((a, b) => positions[a].compareTo(positions[b]));
+    final walk = _displacedGoLeft ? order.reversed.toList() : order;
+    final displaced = List<bool>.filled(count, false);
+    for (var k = 1; k < walk.length; k++) {
+      final previous = walk[k - 1];
+      final current = walk[k];
+      if ((positions[current] - positions[previous]).abs() <= 1 &&
+          !displaced[previous]) {
+        displaced[current] = true;
+      }
+    }
+    return displaced;
+  }
+
+  /// A down-stem chord puts its displaced heads left of the stem; an up-stem
+  /// or stemless one puts them on the right.
+  bool get _displacedGoLeft => hasStem && !_isStemUp;
+
+  /// Whether any head sits in a column left of the normal one, which then
+  /// moves right by one head to make room.
+  bool get _hasLeftColumn => _displacedGoLeft && _displacedHeads.contains(true);
+
+  /// How far the second column sits from the first: heads on a stem share
+  /// its thickness; stemless heads (whole notes) just touch.
+  double get _columnStep =>
+      hasStem ? _noteHeadWidth - stemThickness : _noteHeadWidth;
 
   /// list of [ChordNotePart]s that have accidental note heads.
   List<ChordNotePart> get _hasAccidentalNoteHeads =>
@@ -155,12 +206,14 @@ class ChordNoteMetrics implements MusicalSymbolMetrics {
   /// Gets the sum of the widths of the accidentals.
   double get _accidentalsWidthSum => _accidentalsBbox.width;
 
-  /// Gets the left x-coordinate of the left note head.
-  double get _leftNoteHeadLeftX => _accidentalsBbox.right;
+  /// The left x of the column the stem's normal-side heads sit in.
+  double get _normalColumnLeftX =>
+      _accidentalsBbox.right + (_hasLeftColumn ? _columnStep : 0);
 
-  /// Gets the left x-coordinate of the right note head.
-  double get _rightNoteHeadLeftX =>
-      _leftNoteHeadLeftX + _noteHeadWidth - stemThickness;
+  /// The left x of the column the displaced heads sit in.
+  double get _displacedColumnLeftX => _displacedGoLeft
+      ? _accidentalsBbox.right
+      : _normalColumnLeftX + _columnStep;
 
   /// Gets the original path of the note head.
   Path get _noteHeadOriginPath => _getPath(_noteHeadPathKey);
@@ -168,8 +221,11 @@ class ChordNoteMetrics implements MusicalSymbolMetrics {
   /// Gets the width of the note head.
   double get _noteHeadWidth => _noteHeadOriginPath.getBounds().width;
 
+  /// What stands in front of the normal-side heads: the accidentals, and a
+  /// down-stem chord's displaced heads.
   @override
-  double get leadingWidth => _accidentalsWidthSum;
+  double get leadingWidth =>
+      _accidentalsWidthSum + (_hasLeftColumn ? _columnStep : 0);
 
   @override
   double get durationUnits =>
@@ -234,18 +290,6 @@ class ChordNoteMetrics implements MusicalSymbolMetrics {
   /// Gets the path key of the note head.
   String get _noteHeadPathKey => _noteHeadType.pathKey;
 
-  /// Gets the left x-coordinate of the note head for a specific [ChordNotePart].
-  double _getNoteHeadLeftX(ChordNotePart note) =>
-      (_hasNoteHeadBelowOne(note) ? _rightNoteHeadLeftX : _leftNoteHeadLeftX);
-
-  /// Checks if the position difference with the note below is 1.
-  bool _hasNoteHeadBelowOne(ChordNotePart noteHead) =>
-      _otherPitches(noteHead.pitch).contains(noteHead.pitch.down);
-
-  /// Returns a list of [Pitch] objects that are not equal to the given [pitch].
-  List<Pitch> _otherPitches(Pitch pitch) =>
-      _noteParts.map((e) => e.pitch).where((e) => e != pitch).toList();
-
   /// Gets the sum of the local positions of the note parts.
   int get _notePositionsSum => _noteParts
       .map((e) => _getNotePosition(e).localPosition)
@@ -275,8 +319,9 @@ class ChordNoteMetrics implements MusicalSymbolMetrics {
   /// Gets the thickness of the stem.
   double get stemThickness => metadata.stemThickness;
 
-  /// Gets the initial x-coordinate of the note head.
-  double get _noteHeadInitialX => noteHeadsBbox.left;
+  /// The left edge of the normal-side heads, which the stem is set against.
+  double get _noteHeadInitialX =>
+      noteHeadsBbox.left + (_hasLeftColumn ? _columnStep : 0);
 
   /// Gets the offset of the stem root.
   Offset get stemRootOffset =>
