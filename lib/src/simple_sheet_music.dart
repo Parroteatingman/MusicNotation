@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:core';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:simple_sheet_music/src/constants.dart';
@@ -141,6 +143,17 @@ class SimpleSheetMusic extends StatefulWidget {
   /// again whenever the layout changes — never for a repaint alone.
   final ValueChanged<List<SheetSymbolBox>>? onLayout;
 
+  /// Reads and parses [fontType] ahead of the first staff, so that staff
+  /// draws on its first frame. The parse runs on a background isolate; a
+  /// staff shown meanwhile waits for the same read rather than start one.
+  static Future<void> preloadFont([FontType fontType = FontType.bravura]) =>
+      _SheetMusicFont.load(fontType);
+
+  /// How many times a staff was laid out (a layout built, not reused).
+  /// For tests that check identical input is not laid out again.
+  @visibleForTesting
+  static int debugLayoutCount = 0;
+
   @override
   SimpleSheetMusicState createState() => SimpleSheetMusicState();
 }
@@ -169,12 +182,11 @@ class _SheetMusicFont {
     return _loading.putIfAbsent(fontType, () async {
       try {
         final xml = await rootBundle.loadString(fontType.svgPath);
-        final document = XmlDocument.parse(xml);
-        final allGlyphs = document.findAllElements('glyph').toSet();
         final json = await rootBundle.loadString(fontType.metadataPath);
+        final parsed = await _parse(xml, json);
         final font = _SheetMusicFont(
-          GlyphPaths(allGlyphs),
-          GlyphMetadata(jsonDecode(json) as Map<String, dynamic>),
+          GlyphPaths(parsed.glyphs),
+          GlyphMetadata(parsed.metadata),
         );
         _ready[fontType] = font;
         return font;
@@ -185,6 +197,36 @@ class _SheetMusicFont {
       }
     });
   }
+
+  /// The glyphs and the metadata, parsed off the UI thread: the SVG is
+  /// about 2 MB and the metadata 0.75 MB, and parsing them on the main
+  /// isolate stalled the first staff shown (a hitch on the first 琶音 or
+  /// 音阶 layer, chord card, lick…). `compute` hands the result back
+  /// without copying it (the worker exits with it); should the worker
+  /// fail, the parse runs here as it always did.
+  static Future<_ParsedFont> _parse(String xml, String json) async {
+    try {
+      return await compute(_parseInWorker, <String>[xml, json]);
+    } on Object catch (_) {
+      return _parseNow(xml, json);
+    }
+  }
+
+  static _ParsedFont _parseInWorker(List<String> sources) =>
+      _parseNow(sources[0], sources[1]);
+
+  static _ParsedFont _parseNow(String xml, String json) => _ParsedFont(
+        XmlDocument.parse(xml).findAllElements('glyph').toSet(),
+        jsonDecode(json) as Map<String, dynamic>,
+      );
+}
+
+/// A font as parsed, before it is wrapped for drawing.
+class _ParsedFont {
+  const _ParsedFont(this.glyphs, this.metadata);
+
+  final Set<XmlElement> glyphs;
+  final Map<String, dynamic> metadata;
 }
 
 class SimpleSheetMusicState extends State<SimpleSheetMusic> {
@@ -276,6 +318,7 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
       return _cachedRenderer!;
     }
 
+    SimpleSheetMusic.debugLayoutCount++;
     final metricsBuilder = SheetMusicMetrics(
       widget.measures,
       widget.initialClefType,

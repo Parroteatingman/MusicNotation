@@ -80,7 +80,26 @@ class ChordNoteMetrics implements MusicalSymbolMetrics {
 
   List<ChordNotePart> get _noteParts => note.noteParts;
 
-  List<ChordNoteHeadMetrics> get _noteHeads {
+  // Measurements worked out once per metrics object, as NoteMetrics keeps
+  // its own: every field here is final, and recomputed, each read of the
+  // chord's box walked the heads, accidentals and stem again (a chord
+  // stack cost a staff ten times what it does now). Expandos, since the
+  // constructor is const.
+  static final Expando<List<ChordNoteHeadMetrics>> _noteHeadsCache =
+      Expando<List<ChordNoteHeadMetrics>>('ChordNoteMetrics.noteHeads');
+  static final Expando<List<bool>> _displacedHeadsCache =
+      Expando<List<bool>>('ChordNoteMetrics.displacedHeads');
+  static final Expando<Rect> _accidentalsBboxCache =
+      Expando<Rect>('ChordNoteMetrics.accidentalsBbox');
+  static final Expando<Rect> _noteHeadsBboxCache =
+      Expando<Rect>('ChordNoteMetrics.noteHeadsBbox');
+  static final Expando<Rect> _bboxCache =
+      Expando<Rect>('ChordNoteMetrics.bbox');
+
+  List<ChordNoteHeadMetrics> get _noteHeads =>
+      _noteHeadsCache[this] ??= List.unmodifiable(_buildNoteHeads());
+
+  List<ChordNoteHeadMetrics> _buildNoteHeads() {
     final displaced = _displacedHeads;
     return [
       for (var i = 0; i < _noteParts.length; i++)
@@ -116,7 +135,10 @@ class ChordNoteMetrics implements MusicalSymbolMetrics {
   /// head before it is displaced unless that one already was, so a run of
   /// seconds alternates sides: G B C D E stem up is G B D on the left, C E on
   /// the right. Stemless notes (whole notes) follow the up-stem pattern.
-  List<bool> get _displacedHeads {
+  List<bool> get _displacedHeads =>
+      _displacedHeadsCache[this] ??= List.unmodifiable(_findDisplacedHeads());
+
+  List<bool> _findDisplacedHeads() {
     final count = _noteParts.length;
     final positions = [
       for (final part in _noteParts) _getNotePosition(part).localPosition,
@@ -191,7 +213,10 @@ class ChordNoteMetrics implements MusicalSymbolMetrics {
   bool get _hasAccidental => _noteParts.any((e) => e.accidental != null);
 
   /// Gets the bounding box of the accidentals.
-  Rect get _accidentalsBbox {
+  Rect get _accidentalsBbox =>
+      _accidentalsBboxCache[this] ??= _measureAccidentalsBbox();
+
+  Rect _measureAccidentalsBbox() {
     if (!_hasAccidental) {
       return Rect.zero;
     }
@@ -235,7 +260,8 @@ class ChordNoteMetrics implements MusicalSymbolMetrics {
   double get lowerHeight => _bbox.bottom;
 
   /// Gets the bounding box of the chord note.
-  Rect get _bbox => Rect.fromLTRB(_left, _top, _right, _bottom);
+  Rect get _bbox =>
+      _bboxCache[this] ??= Rect.fromLTRB(_left, _top, _right, _bottom);
 
   /// Gets the left coordinate of the bounding box.
   double get _left => [noteHeadsBbox.left, _accidentalsBbox.left].min;
@@ -282,7 +308,8 @@ class ChordNoteMetrics implements MusicalSymbolMetrics {
       _noteHeads.map((e) => e.noteHeadRect).toList();
 
   /// Gets the bounding box that encompasses all the note heads.
-  Rect get noteHeadsBbox => _noteHeadsBboxes.fold(
+  Rect get noteHeadsBbox =>
+      _noteHeadsBboxCache[this] ??= _noteHeadsBboxes.fold<Rect>(
         _noteHeadsBboxes.first,
         (previousValue, element) => previousValue.expandToInclude(element),
       );

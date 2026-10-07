@@ -144,8 +144,23 @@ class NoteMetrics implements MusicalSymbolMetrics {
   // The width of the note head.
   double get noteHeadWidth => _noteHeadBbox.width;
 
+  // Measurements worked out once per metrics object. Every field here is
+  // final, so they never change; recomputed, each `bbox` read shifted the
+  // head, stem and flag paths and asked their bounds again through a chain
+  // of getters, and a layout reads it many times per note (most of a
+  // staff's layout and paint time). Expandos, since the constructor is
+  // const.
+  static final Expando<Rect> _bboxCache = Expando<Rect>('NoteMetrics.bbox');
+  static final Expando<Rect> _noteHeadBboxCache =
+      Expando<Rect>('NoteMetrics.noteHeadBbox');
+  static final Expando<Rect> _flagBboxCache =
+      Expando<Rect>('NoteMetrics.flagBbox');
+  static final Expando<Offset> _stemRootOffsetCache =
+      Expando<Offset>('NoteMetrics.stemRootOffset');
+
   // The bounding box of the note.
-  Rect get bbox => Rect.fromLTRB(_left, _top, _right, _bottom);
+  Rect get bbox =>
+      _bboxCache[this] ??= Rect.fromLTRB(_left, _top, _right, _bottom);
 
   double get _left =>
       [_noteHeadBbox.left, (_accidentalBbox?.left ?? double.infinity)].min;
@@ -216,7 +231,8 @@ class NoteMetrics implements MusicalSymbolMetrics {
   double get width => bbox.width;
 
   // The bounding box of the note head.
-  Rect get _noteHeadBbox => noteHeadPath.getBounds();
+  Rect get _noteHeadBbox =>
+      _noteHeadBboxCache[this] ??= noteHeadPath.getBounds();
 
   // The default offset of the note.
   Offset get _defaultOffset => Offset.zero;
@@ -285,7 +301,7 @@ class NoteMetrics implements MusicalSymbolMetrics {
   double get _noteHeadInitialX => _noteHeadBbox.left;
 
   // The offset of the stem root.
-  Offset get stemRootOffset =>
+  Offset get stemRootOffset => _stemRootOffsetCache[this] ??=
       Offset(_noteHeadInitialX, 0) +
       metadata.stemRootOffset(_noteHeadType.metadataKey, isStemUp: isStemUp) +
       _stemThicknessOffset +
@@ -387,7 +403,12 @@ class NoteMetrics implements MusicalSymbolMetrics {
   }
 
   // The bounding box of the flag.
-  Rect? get _flagBbox => flagPath?.getBounds();
+  Rect? get _flagBbox {
+    if (!hasFlag) {
+      return null;
+    }
+    return _flagBboxCache[this] ??= flagPath!.getBounds();
+  }
 }
 
 /// A class that renders a musical note symbol.

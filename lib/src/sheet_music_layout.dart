@@ -133,7 +133,16 @@ class SheetMusicLayout {
   double get _fullWidthOnCanvas => widgetWidth / canvasScale;
 
   /// The list of staff renderers.
-  List<StaffRenderer> get staffRenderers {
+  ///
+  /// Built once per layout: every field here is final and every metric
+  /// beneath it is a pure function of the measures, so a repaint or a hit
+  /// test gets the same renderers instead of laying the page out again (it
+  /// used to, on every paint — most of a staff's paint time).
+  List<StaffRenderer> get staffRenderers =>
+      _staffRenderers ??= _buildStaffRenderers();
+  List<StaffRenderer>? _staffRenderers;
+
+  List<StaffRenderer> _buildStaffRenderers() {
     var currentY = _upperPaddingOnCanvas;
     final staffList = metrics.staffsMetricses.toList();
     final lastIndex = staffList.length - 1;
@@ -303,7 +312,12 @@ class SheetMusicLayout {
   double get _naturalScale => min(_widthScale, _heightScale);
 
   /// The scale factor for the canvas, capped by maxCanvasScale if set.
-  double get canvasScale {
+  /// Worked out once per layout (see [staffRenderers]): every padding and
+  /// position reads it, and each read walked every note's metrics again.
+  double get canvasScale => _canvasScale ??= _computeCanvasScale();
+  double? _canvasScale;
+
+  double _computeCanvasScale() {
     final natural = _naturalScale;
     if (maxCanvasScale != null && natural > maxCanvasScale!) {
       return maxCanvasScale!;
