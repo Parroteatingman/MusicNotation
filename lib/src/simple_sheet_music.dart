@@ -45,6 +45,7 @@ class SimpleSheetMusic extends StatefulWidget {
     this.distributeSymbolsToFullWidth = false,
     this.contentHorizontalPadding = 0,
     this.maxCanvasScale,
+    this.minCanvasScale,
     this.onSymbolTap,
     this.onSymbolDragged,
     this.onSymbolDragEnd,
@@ -100,6 +101,10 @@ class SimpleSheetMusic extends StatefulWidget {
   /// If set, caps the canvas scale for consistent sizing across multiple lines.
   final double? maxCanvasScale;
 
+  /// Never draws the staff smaller than this: a line too long for the width
+  /// pulls its notes together instead. See [SheetMusicLayout.minCanvasScale].
+  final double? minCanvasScale;
+
   final ValueChanged<int>? onSymbolTap;
 
   /// Called while a symbol is dragged up or down, with how many staff steps
@@ -148,6 +153,58 @@ class SimpleSheetMusic extends StatefulWidget {
   /// staff shown meanwhile waits for the same read rather than start one.
   static Future<void> preloadFont([FontType fontType = FontType.bravura]) =>
       _SheetMusicFont.load(fontType);
+
+  /// How wide [measures] are, in points, set as one line at [canvasScale]
+  /// (font units to points; a staff space is 250) with every note given the
+  /// room its value asks for and nothing squeezed: the width a line needs to
+  /// be read at that size. Null until [fontType] has loaded (see
+  /// [preloadFont]).
+  ///
+  /// [spacingFrom] is the page the line will be drawn in, when that is more
+  /// than the line itself (one widget drawing several lines spaces them all
+  /// against the page's shortest note); left out, the line is measured as a
+  /// staff of its own. A caller breaks its lines with this so that a busy
+  /// bar moves down rather than drawing the line smaller.
+  static double? lineWidth(
+    List<Measure> measures, {
+    required double canvasScale,
+    List<Measure>? spacingFrom,
+    FontType fontType = FontType.bravura,
+  }) {
+    final font = _SheetMusicFont.ready(fontType);
+    if (font == null || measures.isEmpty) return null;
+    final spacing = spacingFrom == null
+        ? null
+        : SheetMusicMetrics(
+            spacingFrom,
+            ClefType.treble,
+            KeySignatureType.cMajor,
+            font.metadata,
+            font.glyphPath,
+          ).spacing;
+    final line = SheetMusicMetrics(
+      [
+        for (final measure in measures)
+          measure.isNewLine
+              ? Measure(
+                  measure.musicalSymbols,
+                  startRepeat: measure.startRepeat,
+                  endBarline: measure.endBarline,
+                )
+              : measure,
+      ],
+      ClefType.treble,
+      KeySignatureType.cMajor,
+      font.metadata,
+      font.glyphPath,
+      spacing: spacing,
+    );
+    var width = 0.0;
+    for (final staff in line.staffsMetricses) {
+      width += staff.objectsWidth * canvasScale + staff.horizontalMarginSum;
+    }
+    return width;
+  }
 
   /// How many times a staff was laid out (a layout built, not reused).
   /// For tests that check identical input is not laid out again.
@@ -253,6 +310,13 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
 
   FontType get fontType => widget.fontType;
 
+  /// The scale the staff was last drawn at (font units to points: a staff
+  /// space is 250 font units), or null before the font has loaded. For
+  /// tests that check a staff kept its size.
+  @visibleForTesting
+  double? get debugCanvasScale =>
+      _cachedRenderer?.sheetMusicLayout.canvasScale;
+
   @override
   void initState() {
     super.initState();
@@ -290,6 +354,7 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
       widget.distributeSymbolsToFullWidth,
       widget.contentHorizontalPadding,
       widget.maxCanvasScale,
+      widget.minCanvasScale,
       widget.onSymbolTap != null,
       widget.onSymbolDragged != null,
       widget.justifyLines,
@@ -339,6 +404,7 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
       distributeSymbolsToFullWidth: widget.distributeSymbolsToFullWidth,
       contentHorizontalPadding: widget.contentHorizontalPadding,
       maxCanvasScale: widget.maxCanvasScale,
+      minCanvasScale: widget.minCanvasScale,
       justifyLines: widget.justifyLines,
       spreadOnlyNotes: widget.spreadOnlyNotes,
       minStretch: widget.minStretch,

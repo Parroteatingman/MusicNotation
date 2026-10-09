@@ -21,6 +21,8 @@ class MeasureRenderer {
     required this.measureOriginX,
     required this.staffLineCenterY,
     this.stretch = 1,
+    this.squeeze = 1,
+    this.marginScale = 1,
   });
 
   final List<MusicalSymbolRenderer> symbolRenderers;
@@ -30,6 +32,13 @@ class MeasureRenderer {
 
   /// How far the symbols of this measure were pulled apart to fill the line.
   final double stretch;
+
+  /// How much of the room beyond each glyph the line kept (1: all of it).
+  /// See [MeasureMetrics.advanceIn].
+  final double squeeze;
+
+  /// How much of each symbol's margin the line kept.
+  final double marginScale;
 
   /// Performs a hit test at the given [position] and returns the corresponding [MusicalSymbolRenderer].
   ///
@@ -518,10 +527,16 @@ class MeasureRenderer {
 
   /// The width of the measure.
   double get width {
-    final fixed = layout.spreadOnlyNotes ? measureMetrics.fixedWidth : 0.0;
-    return fixed +
-        (measureMetrics.objectsWidth - fixed) * stretch +
-        measureMetrics.horizontalMarginSum / scale;
+    var advances = 0.0;
+    for (final symbol in measureMetrics.musicalSymbolsMetricses) {
+      advances += measureMetrics.advanceIn(
+        symbol,
+        spreadOnlyNotes: layout.spreadOnlyNotes,
+        stretch: stretch,
+        squeeze: squeeze,
+      );
+    }
+    return advances + measureMetrics.horizontalMarginSum * marginScale / scale;
   }
 
   /// The scale of the measure.

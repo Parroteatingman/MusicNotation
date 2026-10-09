@@ -27,6 +27,10 @@ class StaffMetrics {
   double get objectsWidth =>
       measuresMetricses.map((measure) => measure.objectsWidth).sum;
 
+  /// The width of every symbol's own glyph, set glyph to glyph.
+  double get glyphWidth =>
+      measuresMetricses.map((measure) => measure.glyphWidth).sum;
+
   /// The part of [objectsWidth] held by symbols that carry no time.
   double get fixedWidth =>
       measuresMetricses.map((measure) => measure.fixedWidth).sum;
@@ -66,6 +70,8 @@ class StaffMetrics {
     bool showFinalBarline = false,
     double? staffExtendWidth,
     double stretch = 1,
+    double squeeze = 1,
+    double marginScale = 1,
     int? caretIndex,
     Color? caretColor,
   }) {
@@ -77,6 +83,8 @@ class StaffMetrics {
         measureInitialX: currentX,
         staffLineCenterY: staffLineCenterY,
         stretch: stretch,
+        squeeze: squeeze,
+        marginScale: marginScale,
       );
       currentX += m.width;
       measureRendereres.add(m);

@@ -163,6 +163,54 @@ void main() {
       expect(layout.stretchFor(staff, isLast: true), 1);
     });
   });
+
+  group('held to a size (minCanvasScale)', () {
+    // A page 100 wide; the line's clef and barlines are 20 of its width.
+    SheetMusicLayout layoutOf(double objectsWidth, {required double glyphWidth}) {
+      final staff = _FakeStaffMetrics(
+        objectsWidth: objectsWidth,
+        symbolCount: 8,
+        fixedWidth: 20,
+        glyphWidth: glyphWidth,
+      );
+      return SheetMusicLayout(
+        MockSheetMusicMetrics(
+          maximumStaffWidth: objectsWidth,
+          maximumStaffObjectsWidth: objectsWidth,
+          staffsHeightSum: 1,
+          staffsMetricses: [staff],
+        ),
+        Colors.black,
+        widgetHeight: 100,
+        widgetWidth: 100,
+        distributeSymbolsToFullWidth: true,
+        spreadOnlyNotes: true,
+        maxCanvasScale: 1,
+        minCanvasScale: 1,
+      );
+    }
+
+    test('a busy line keeps the size, its notes pulled together', () {
+      // Notes claim 140 (their glyphs 40 of it); 80 is left for them.
+      final layout = layoutOf(160, glyphWidth: 60);
+      expect(layout.canvasScale, 1);
+      final staff = layout.metrics.staffsMetricses.single;
+      expect(layout.stretchFor(staff, isLast: true), 1);
+    });
+
+    test('only a line too long glyph to glyph draws the page smaller', () {
+      // Glyphs alone are 120 wide: the page is drawn at 100 / 120.
+      final layout = layoutOf(200, glyphWidth: 120);
+      expect(layout.canvasScale, closeTo(100 / 120, 1e-9));
+    });
+
+    test('a line that fits is spread as before', () {
+      final layout = layoutOf(70, glyphWidth: 40);
+      expect(layout.canvasScale, 1);
+      final staff = layout.metrics.staffsMetricses.single;
+      expect(layout.stretchFor(staff, isLast: true), closeTo((100 - 20) / 50, 1e-9));
+    });
+  });
 }
 
 class _FakeStaffMetrics extends Fake implements StaffMetrics {
@@ -170,7 +218,11 @@ class _FakeStaffMetrics extends Fake implements StaffMetrics {
     required this.objectsWidth,
     required this.symbolCount,
     this.fixedWidth = 0,
-  });
+    double? glyphWidth,
+  }) : glyphWidth = glyphWidth ?? objectsWidth;
+
+  @override
+  final double glyphWidth;
 
   @override
   final double objectsWidth;

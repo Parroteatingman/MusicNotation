@@ -26,6 +26,7 @@ class SheetMusicLayout {
     this.distributeSymbolsToFullWidth = false,
     this.contentHorizontalPadding = 0,
     this.maxCanvasScale,
+    this.minCanvasScale,
     this.justifyLines = true,
     this.spreadOnlyNotes = false,
     this.minStretch = 1,
@@ -70,6 +71,21 @@ class SheetMusicLayout {
 
   /// If set, caps the canvas scale to this value for consistent sizing across lines.
   final double? maxCanvasScale;
+
+  /// If set, the page is never drawn smaller than this, whatever its lines
+  /// hold: a line too long for the page at this size has its notes pulled
+  /// together instead — first the room beyond each glyph, then part of each
+  /// margin — never its glyphs drawn smaller. Only a line too long even set
+  /// glyph to glyph (which a caller that breaks its lines by width never
+  /// asks for) makes the page smaller, by as little as that line needs. The
+  /// height still limits the size, as it always did. Set it to
+  /// [maxCanvasScale] to draw at one fixed size; set it to infinity to draw
+  /// at the size the height gives (capped by [maxCanvasScale]).
+  final double? minCanvasScale;
+
+  /// How much of its margins a line may lose when it is pulled together at
+  /// [minCanvasScale]: a sliver of paper is kept between glyphs.
+  static const double minMarginScale = 0.3;
 
   /// Pull each line but the last out to the full width, the way an engraver
   /// justifies every system but the final one. A short middle line with a
@@ -118,7 +134,9 @@ class SheetMusicLayout {
       ? contentHorizontalPadding / canvasScale
       : alignLeft
           ? 0
-          : _horizontalPaddingOnCanvas / 2;
+          // A page held at its size with a line squeezed to the width has no
+          // room to centre in.
+          : max(0.0, _horizontalPaddingOnCanvas / 2);
 
   /// The vertical padding of the sheet music.
   double get _verticalPadding => widgetHeight - _staffsHeightsSum * canvasScale;
@@ -154,6 +172,7 @@ class SheetMusicLayout {
       final staffMetrics = staffList[i];
       currentY += staffMetrics.upperHeight;
       final isLast = i == lastIndex;
+      final fit = _fitFor(staffMetrics, isLast: isLast);
       final staffRenderer = staffMetrics.renderer(
         this,
         staffLineCenterY: currentY,
@@ -163,7 +182,9 @@ class SheetMusicLayout {
         showEndBarline: !isLast && showEndBarline,
         showFinalBarline: isLast && showFinalBarline,
         staffExtendWidth: extendStaffToFullWidth ? _fullWidthOnCanvas : null,
-        stretch: stretchFor(staffMetrics, isLast: isLast),
+        stretch: fit.stretch,
+        squeeze: fit.squeeze,
+        marginScale: fit.marginScale,
         caretIndex: _caretOnLine(
           symbolsBefore,
           staffMetrics.selectableSymbolCount,
@@ -319,10 +340,34 @@ class SheetMusicLayout {
 
   double _computeCanvasScale() {
     final natural = _naturalScale;
-    if (maxCanvasScale != null && natural > maxCanvasScale!) {
-      return maxCanvasScale!;
+    final capped = maxCanvasScale != null && natural > maxCanvasScale!
+        ? maxCanvasScale!
+        : natural;
+    final floor = minCanvasScale;
+    if (floor == null) return capped;
+    // The height the page is given still holds it (a line of ledger notes
+    // is drawn smaller rather than run into the next); only the width gives
+    // way to the floor.
+    final byHeight =
+        maxCanvasScale == null ? _heightScale : min(_heightScale, maxCanvasScale!);
+    return max(capped, min(min(floor, byHeight), _tightestScale()));
+  }
+
+  /// The largest scale at which every line fits the width set glyph to
+  /// glyph, with its margins cut as far as [minMarginScale].
+  double _tightestScale() {
+    final room = distributeSymbolsToFullWidth
+        ? widgetWidth - contentHorizontalPadding * 2
+        : widgetWidth;
+    var tightest = double.infinity;
+    for (final staff in metrics.staffsMetricses) {
+      final glyphs = staff.glyphWidth;
+      if (glyphs <= 0) continue;
+      final scale =
+          (room - staff.horizontalMarginSum * minMarginScale) / glyphs;
+      if (scale < tightest) tightest = scale;
     }
-    return natural;
+    return tightest > 0 ? tightest : double.infinity;
   }
 
   /// A line is never pulled out further than this, so a line holding one or
@@ -335,7 +380,42 @@ class SheetMusicLayout {
   /// dropped between every pair, so justifying a line does not flatten the
   /// difference between a whole note and a sixteenth.
   @visibleForTesting
-  double stretchFor(StaffMetrics staff, {required bool isLast}) {
+  double stretchFor(StaffMetrics staff, {required bool isLast}) =>
+      _fitFor(staff, isLast: isLast).stretch;
+
+  /// How a line is set across the page: pulled out ([_LineFit.stretch]), or,
+  /// at [minCanvasScale], pulled together without its glyphs shrinking.
+  _LineFit _fitFor(StaffMetrics staff, {required bool isLast}) {
+    if (minCanvasScale != null) {
+      final squeezed = _squeezeAtSize(staff);
+      if (squeezed != null) return squeezed;
+    }
+    return _LineFit(_stretchFor(staff, isLast: isLast));
+  }
+
+  /// A line too long for the page at the size it is held to, pulled
+  /// together: the room beyond each glyph goes first, then margins down to
+  /// [minMarginScale]. Null when the line fits as it is.
+  _LineFit? _squeezeAtSize(StaffMetrics staff) {
+    final scale = canvasScale;
+    final fixed = spreadOnlyNotes ? staff.fixedWidth : 0.0;
+    final leftPadding = _leftPaddingOnCanvas * scale;
+    final room = (widgetWidth - leftPadding * 2) / scale - fixed;
+    final margins = staff.horizontalMarginSum / scale;
+    final claimed = staff.objectsWidth - fixed;
+    if (claimed + margins <= room + 1e-6) return null;
+    final glyphs = staff.glyphWidth - fixed;
+    final spare = claimed - glyphs;
+    if (spare > 0 && glyphs + margins <= room) {
+      return _LineFit(1, squeeze: (room - margins - glyphs) / spare);
+    }
+    final marginScale = margins <= 0
+        ? 1.0
+        : ((room - glyphs) / margins).clamp(minMarginScale, 1.0);
+    return _LineFit(1, squeeze: 0, marginScale: marginScale);
+  }
+
+  double _stretchFor(StaffMetrics staff, {required bool isLast}) {
     final justify = distributeSymbolsToFullWidth || (justifyLines && !isLast);
     if (!justify || staff.symbolCount < 2) return 1;
 
@@ -365,4 +445,14 @@ class SheetMusicLayout {
       staff.render(canvas, size);
     }
   }
+}
+
+/// How one line is set: see [SheetMusicLayout.stretchFor] and
+/// [MeasureMetrics.advanceIn].
+class _LineFit {
+  const _LineFit(this.stretch, {this.squeeze = 1, this.marginScale = 1});
+
+  final double stretch;
+  final double squeeze;
+  final double marginScale;
 }

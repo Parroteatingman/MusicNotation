@@ -7,6 +7,7 @@ import 'package:simple_sheet_music/src/measure/barline.dart';
 import 'package:simple_sheet_music/src/measure/measure_renderer.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_metrics.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_renderer.dart';
+import 'package:simple_sheet_music/src/music_objects/notes/single_note/note.dart';
 import 'package:simple_sheet_music/src/sheet_music_layout.dart';
 
 /// Represents the metrics of a measure in sheet music.
@@ -56,6 +57,36 @@ class MeasureMetrics {
       .map(spacing.advanceOf)
       .sum;
 
+  /// The width of the symbols' own glyphs, before any room their note values
+  /// ask for: what the measure takes with its notes set glyph to glyph.
+  double get glyphWidth => musicalSymbolsMetricses.map(inkWidthOf).sum;
+
+  /// How wide [symbol]'s ink is across the line (a beamed note's unseen
+  /// flag left out; see [NoteMetrics.inkWidth]).
+  static double inkWidthOf(MusicalSymbolMetrics symbol) =>
+      symbol is NoteMetrics ? symbol.inkWidth : symbol.width;
+
+  /// How far along the line [symbol] moves the next one, its margins aside.
+  ///
+  /// [stretch] scales the room the symbol claims (a justified line pulled
+  /// out, or the old squeeze, [SheetMusicLayout.minStretch]). [squeeze]
+  /// takes away only the room beyond the glyph — 0 sets glyph to glyph — so
+  /// a busy line drawn at its full size pulls its notes together without
+  /// ever running one into the next.
+  double advanceIn(
+    MusicalSymbolMetrics symbol, {
+    required bool spreadOnlyNotes,
+    double stretch = 1,
+    double squeeze = 1,
+  }) {
+    final advance = spacing.advanceOf(symbol);
+    if (spreadOnlyNotes && symbol.durationUnits <= 0) return advance;
+    final stretched = advance * stretch;
+    if (squeeze >= 1) return stretched;
+    final glyph = min(inkWidthOf(symbol), stretched);
+    return glyph + (stretched - glyph) * max(0.0, squeeze);
+  }
+
   /// Gets the maximum upper height among all the musical symbols in the measure.
   double get _symbolMaximumUpperHeight =>
       musicalSymbolsMetricses.map((symbol) => symbol.upperHeight).max;
@@ -96,6 +127,8 @@ class MeasureMetrics {
     required double measureInitialX,
     required double staffLineCenterY,
     double stretch = 1,
+    double squeeze = 1,
+    double marginScale = 1,
   }) {
     return MeasureRenderer(
       _symbolRenderers(
@@ -103,12 +136,16 @@ class MeasureMetrics {
         measureOriginX: measureInitialX,
         staffLineCenterY: staffLineCenterY,
         stretch: stretch,
+        squeeze: squeeze,
+        marginScale: marginScale,
       ),
       this,
       layout,
       measureOriginX: measureInitialX,
       staffLineCenterY: staffLineCenterY,
       stretch: stretch,
+      squeeze: squeeze,
+      marginScale: marginScale,
     );
   }
 
@@ -117,24 +154,34 @@ class MeasureMetrics {
     required double measureOriginX,
     required double staffLineCenterY,
     required double stretch,
+    required double squeeze,
+    required double marginScale,
   }) {
     final result = <MusicalSymbolRenderer>[];
     var x = measureOriginX;
+    final scale = layout.canvasScale;
     for (final symbol in musicalSymbolsMetricses) {
+      // A renderer sets its glyph its whole left margin in from symbolX; a
+      // line whose margins are cut down hands it a symbolX moved back by
+      // what was cut, so the glyph lands where the cut margin ends.
+      final cutLeft = symbol.margin.left * (1 - marginScale) / scale;
       result.add(
         symbol.renderer(
           layout,
           staffLineCenterY: staffLineCenterY,
-          symbolX: x,
+          symbolX: x - cutLeft,
         ),
       );
       // Stretching the width each symbol claims, rather than adding the same
       // gap everywhere, is what lets a short line fill the page without
       // flattening the difference between a whole note and a sixteenth.
-      final spread =
-          layout.spreadOnlyNotes && symbol.durationUnits <= 0 ? 1 : stretch;
-      x += spacing.advanceOf(symbol) * spread +
-          symbol.margin.horizontal / layout.canvasScale;
+      x += advanceIn(
+            symbol,
+            spreadOnlyNotes: layout.spreadOnlyNotes,
+            stretch: stretch,
+            squeeze: squeeze,
+          ) +
+          symbol.margin.horizontal * marginScale / scale;
     }
     return result;
   }

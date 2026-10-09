@@ -230,6 +230,18 @@ class NoteMetrics implements MusicalSymbolMetrics {
   @override
   double get width => bbox.width;
 
+  /// The width the note's ink really takes across the line. A beamed note
+  /// draws no flag, but [width] (and so the spacing every page is set by)
+  /// counts one; a line pulled together glyph to glyph goes by this.
+  double get inkWidth {
+    if (!note.isBeamed || !hasFlag) return width;
+    final right = [
+      _noteHeadBbox.right + (note.isDotted ? _dotSpaceWidth : 0),
+      (_accidentalBbox?.right ?? double.negativeInfinity),
+    ].max;
+    return right - bbox.left;
+  }
+
   // The bounding box of the note head.
   Rect get _noteHeadBbox =>
       _noteHeadBboxCache[this] ??= noteHeadPath.getBounds();

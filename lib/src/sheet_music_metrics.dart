@@ -18,8 +18,21 @@ class SheetMusicMetrics {
     this.initialClefType,
     this.initialKeySignatureType,
     this.metadata,
-    this.paths,
-  );
+    this.paths, {
+    SpacingReference? spacing,
+  }) : _spacingOverride = spacing;
+
+  /// The reference to space against instead of this page's own shortest
+  /// note: a line measured on its own for a page that holds more.
+  final SpacingReference? _spacingOverride;
+
+  /// What every symbol on the page is spaced against.
+  SpacingReference get spacing {
+    _measuresMetricses;
+    return _spacing!;
+  }
+
+  SpacingReference? _spacing;
 
   List<MeasureMetrics>? _measuresMetricsesCache;
 
@@ -37,7 +50,7 @@ class SheetMusicMetrics {
 
     // Every staff on the page is spaced against the same shortest note, so
     // note heads keep one size from the first line to the last.
-    final spacing =
+    final spacing = _spacing = _spacingOverride ??
         SpacingReference.of(symbolsPerMeasure.expand((symbols) => symbols));
 
     final result = <MeasureMetrics>[
