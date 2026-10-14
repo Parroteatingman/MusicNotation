@@ -181,7 +181,7 @@ class MarkBand {
   /// measure's notes.
   static List<PlacedMark> place(
       List<MeasureRenderer> measures, GlyphPaths paths,
-      {double? lineEnd}) {
+      {double? lineEnd, double lift = 0}) {
     double rightOf(int i) {
       final m = measures[i];
       final end = m.measureOriginX + m.width;
@@ -194,7 +194,8 @@ class MarkBand {
         m.measureMetrics.marks.isEmpty && m.measureMetrics.volta == null)) {
       return const [];
     }
-    final c = measures.first.staffLineCenterY;
+    // the band moves up with the chord names under it
+    final c = measures.first.staffLineCenterY - lift;
     final foot = c - _foot;
     final out = <PlacedMark>[];
     final band = <PlacedMark>[];

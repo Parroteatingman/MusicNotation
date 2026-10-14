@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:simple_sheet_music/src/measure/measure_marks.dart';
 import 'package:simple_sheet_music/src/measure/measure_metrics.dart';
+import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_metrics.dart';
 
 class MockMeasureMetrics extends Fake implements MeasureMetrics {
   MockMeasureMetrics({
@@ -17,4 +19,13 @@ class MockMeasureMetrics extends Fake implements MeasureMetrics {
   final double objectsWidth;
   @override
   final double horizontalMarginSum;
+
+  @override
+  List<MusicalSymbolMetrics> get musicalSymbolsMetricses => const [];
+
+  @override
+  List<MeasureMark> get marks => const [];
+
+  @override
+  Volta? get volta => null;
 }

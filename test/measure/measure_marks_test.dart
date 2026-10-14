@@ -39,14 +39,18 @@ void main() {
       );
 
   List<MusicalSymbol> bar() => [
-        const Note(Pitch.c5, noteDuration: NoteDuration.half, chordLabel: 'Cmaj7'),
+        const Note(Pitch.c5,
+            noteDuration: NoteDuration.half, chordLabel: 'Cmaj7'),
         const Note(Pitch.e5, noteDuration: NoteDuration.half, chordLabel: 'A7'),
       ];
 
-  test('marks over a line raise it by their band; a line without them is as it was', () {
+  test(
+      'marks over a line raise it by their band; a line without them is as it was',
+      () {
     final plain = layout([Measure(bar()), Measure(bar())]);
     final marked = layout([
-      Measure(bar(), marks: const [MeasureMark.rehearsal('A'), MeasureMark.segno()]),
+      Measure(bar(),
+          marks: const [MeasureMark.rehearsal('A'), MeasureMark.segno()]),
       Measure(bar(), volta: const Volta('1.')),
     ]);
     final upperPlain = plain.metrics.staffUpperHeight;
@@ -56,29 +60,54 @@ void main() {
     expect(plain.markBoxes(), isEmpty);
   });
 
-  test('marks sit side by side over the chord names, an ending over them all', () {
+  test('marks sit side by side over the chord names, an ending over them all',
+      () {
     final l = layout([
-      Measure([const Clef(ClefType.treble), ...bar()],
-          marks: const [MeasureMark.rehearsal('A'), MeasureMark.segno(), MeasureMark.words('Fine')]),
+      Measure([
+        const Clef(ClefType.treble),
+        ...bar()
+      ], marks: const [
+        MeasureMark.rehearsal('A'),
+        MeasureMark.segno(),
+        MeasureMark.words('Fine')
+      ]),
       Measure(bar(), volta: const Volta('1.', ends: false)),
-      Measure(bar(), volta: const Volta('1.', starts: false), marks: const [MeasureMark.words('D.S. al Coda')]),
-      Measure(bar(), volta: const Volta('2.', closed: false), marks: const [MeasureMark.coda(at: 1)]),
+      Measure(bar(),
+          volta: const Volta('1.', starts: false),
+          marks: const [MeasureMark.words('D.S. al Coda')]),
+      Measure(bar(),
+          volta: const Volta('2.', closed: false),
+          marks: const [MeasureMark.coda(at: 1)]),
     ]);
     final boxes = l.markBoxes();
     final kinds = boxes.map((b) => b.kind).toSet();
     expect(kinds, containsAll(SheetMarkKind.values));
     // one label per ending, where it starts
-    expect([for (final b in boxes) if (b.kind == SheetMarkKind.voltaLabel) b.measure], [1, 3]);
-    final band = [for (final b in boxes) if (b.kind != SheetMarkKind.voltaLine) b.rect];
+    expect([
+      for (final b in boxes)
+        if (b.kind == SheetMarkKind.voltaLabel) b.measure
+    ], [
+      1,
+      3
+    ]);
+    final band = [
+      for (final b in boxes)
+        if (b.kind != SheetMarkKind.voltaLine) b.rect
+    ];
     for (var i = 0; i < band.length; i++) {
       for (var j = i + 1; j < band.length; j++) {
-        expect(band[i].overlaps(band[j]), isFalse, reason: '${boxes[i].kind} / ${boxes[j].kind}');
+        expect(band[i].overlaps(band[j]), isFalse,
+            reason: '${boxes[i].kind} / ${boxes[j].kind}');
       }
     }
     // above every chord name, under the endings' brackets
-    final chordTop = l.symbolBoxes().map((b) => b.chordLabel!.top).reduce((a, b) => a < b ? a : b);
+    final chordTop = l
+        .symbolBoxes()
+        .map((b) => b.chordLabel!.top)
+        .reduce((a, b) => a < b ? a : b);
     final bracket = boxes
-        .where((b) => b.kind == SheetMarkKind.voltaLine && b.rect.width > b.rect.height)
+        .where((b) =>
+            b.kind == SheetMarkKind.voltaLine && b.rect.width > b.rect.height)
         .map((b) => b.rect.bottom)
         .reduce((a, b) => a > b ? a : b);
     for (final r in band) {
@@ -87,7 +116,36 @@ void main() {
     }
     // and it draws
     final recorder = ui.PictureRecorder();
-    SheetMusicRenderer(l, repaintKey: 0).paint(Canvas(recorder), const Size(600, 120));
+    SheetMusicRenderer(l, repaintKey: 0)
+        .paint(Canvas(recorder), const Size(600, 120));
     recorder.endRecording().dispose();
+  });
+
+  test(
+      'chord names rise over a line\'s high notes, all of them on one baseline',
+      () {
+    final low = layout([Measure(bar()), Measure(bar())]);
+    final high = layout([
+      Measure(bar()),
+      Measure([
+        const Note(Pitch.c6, noteDuration: NoteDuration.half, chordLabel: 'F7'),
+        const Note(Pitch.a5,
+            noteDuration: NoteDuration.half, chordLabel: 'Bb7'),
+      ]),
+    ]);
+    final lowBoxes = low.symbolBoxes();
+    final highBoxes = high.symbolBoxes();
+    // nothing to clear: where they always were
+    expect(low.metrics.staffsMetricses.single.chordLift, 0);
+    final heads =
+        highBoxes.map((b) => b.headBounds.top).reduce((a, b) => a < b ? a : b);
+    final feet = {
+      for (final b in highBoxes) b.chordLabel!.bottom.toStringAsFixed(3)
+    };
+    expect(feet, hasLength(1), reason: 'one baseline for the line');
+    expect(highBoxes.first.chordLabel!.bottom, lessThan(heads));
+    expect(high.metrics.staffsMetricses.single.chordLift, greaterThan(0));
+    expect(lowBoxes.first.chordLabel!.bottom - lowBoxes.first.staffTop,
+        closeTo(-2.15 * space * low.canvasScale, 0.01));
   });
 }

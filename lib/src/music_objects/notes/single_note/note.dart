@@ -457,7 +457,9 @@ class NoteRenderer implements MusicalSymbolRenderer {
 
   /// Around the chord name drawn over the note, in canvas units.
   Rect? get chordLabelRect => chordLabelRect_(note.note.chordLabel,
-      x: symbolX + note.margin.left / canvasScale, staffLineCenterY: staffLineCenterY);
+      x: symbolX + note.margin.left / canvasScale,
+      staffLineCenterY: staffLineCenterY,
+      lift: layout.chordLiftAt(staffLineCenterY));
 
   void _renderChordLabel(Canvas canvas) {
     final label = note.note.chordLabel;
@@ -496,7 +498,9 @@ class NoteRenderer implements MusicalSymbolRenderer {
 
     final x = symbolX + note.margin.left / canvasScale;
     final topStaffLine = staffLineCenterY - Constants.staffSpace * 2;
-    final y = topStaffLine - Constants.staffSpace * 2.15;
+    final y = topStaffLine -
+        Constants.staffSpace * 2.15 -
+        layout.chordLiftAt(staffLineCenterY);
 
     rootPainter.paint(canvas, Offset(x, y - rootPainter.height));
 

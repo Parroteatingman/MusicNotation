@@ -161,7 +161,9 @@ class RestRenderer implements MusicalSymbolRenderer {
 
   /// Around the chord name drawn over the rest, in canvas units.
   Rect? get chordLabelRect => chordLabelRect_(restMetrics.rest.chordLabel,
-      x: symbolX + restMetrics.leftMargin / layout.canvasScale, staffLineCenterY: staffLineCenterY);
+      x: symbolX + restMetrics.leftMargin / layout.canvasScale,
+      staffLineCenterY: staffLineCenterY,
+      lift: layout.chordLiftAt(staffLineCenterY));
 
   void _renderChordLabel(Canvas canvas) {
     final label = restMetrics.rest.chordLabel;
@@ -212,7 +214,9 @@ class RestRenderer implements MusicalSymbolRenderer {
 
     final x = symbolX + restMetrics.leftMargin / layout.canvasScale;
     final topStaffLine = staffLineCenterY - Constants.staffSpace * 2;
-    final y = topStaffLine - Constants.staffSpace * 2.15;
+    final y = topStaffLine -
+        Constants.staffSpace * 2.15 -
+        layout.chordLiftAt(staffLineCenterY);
 
     rootPainter.paint(canvas, Offset(x, y - rootPainter.height));
 

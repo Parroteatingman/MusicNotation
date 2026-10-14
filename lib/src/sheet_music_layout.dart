@@ -160,6 +160,12 @@ class SheetMusicLayout {
       _staffRenderers ??= _buildStaffRenderers();
   List<StaffRenderer>? _staffRenderers;
 
+  /// How far the chord names of the line whose middle is at
+  /// [staffLineCenterY] are raised (see StaffMetrics.chordLift).
+  double chordLiftAt(double staffLineCenterY) =>
+      _chordLifts[staffLineCenterY] ?? 0;
+  final Map<double, double> _chordLifts = {};
+
   List<StaffRenderer> _buildStaffRenderers() {
     var currentY = _upperPaddingOnCanvas;
     final staffList = metrics.staffsMetricses.toList();
@@ -171,6 +177,7 @@ class SheetMusicLayout {
     for (int i = 0; i <= lastIndex; i++) {
       final staffMetrics = staffList[i];
       currentY += staffMetrics.upperHeight;
+      _chordLifts[currentY] = staffMetrics.chordLift;
       final isLast = i == lastIndex;
       final fit = _fitFor(staffMetrics, isLast: isLast);
       final staffRenderer = staffMetrics.renderer(

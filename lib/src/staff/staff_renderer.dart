@@ -18,7 +18,12 @@ class StaffRenderer {
     this.caretIndex,
     this.caretColor,
     this.paths,
+    this.chordLift = 0,
   });
+
+  /// How far the line's chord names, and the marks over them, are raised
+  /// (see StaffMetrics.chordLift).
+  final double chordLift;
 
   /// The music font's glyphs, for the signs over the line (segno, coda).
   final GlyphPaths? paths;
@@ -28,7 +33,8 @@ class StaffRenderer {
   late final List<PlacedMark> marks =
       paths == null
       ? const []
-      : MarkBand.place(measureRendereres, paths!, lineEnd: staffExtendWidth);
+      : MarkBand.place(measureRendereres, paths!,
+          lineEnd: staffExtendWidth, lift: chordLift);
 
   final List<MeasureRenderer> measureRendereres;
   final bool showBarlines;
