@@ -3,6 +3,7 @@ import 'dart:core';
 import 'package:simple_sheet_music/src/glyph_metadata.dart';
 import 'package:simple_sheet_music/src/glyph_path.dart';
 import 'package:simple_sheet_music/src/measure/barline.dart';
+import 'package:simple_sheet_music/src/measure/measure_marks.dart';
 import 'package:simple_sheet_music/src/music_objects/clef/clef.dart';
 import 'package:simple_sheet_music/src/music_objects/clef/clef_type.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol.dart';
@@ -25,6 +26,8 @@ class Measure {
     this.isNewLine = false,
     this.startRepeat = false,
     this.endBarline,
+    this.marks = const [],
+    this.volta,
   }) : assert(musicalSymbols.length != 0);
 
   /// The list of musical symbols that make up the measure.
@@ -40,6 +43,23 @@ class Measure {
   /// How the measure ends. Null keeps the staff's own barline: a thin line
   /// between measures and whatever the staff ends with.
   final BarlineType? endBarline;
+
+  /// Segno and coda signs, rehearsal marks and words (D.S. al Coda, Fine)
+  /// printed over the measure, above its chord names.
+  final List<MeasureMark> marks;
+
+  /// The ending (1. / 2.) the measure is in, if any.
+  final Volta? volta;
+
+  /// The measure as it is, on a line of its own or not.
+  Measure withNewLine(bool newLine) => Measure(
+        musicalSymbols,
+        isNewLine: newLine,
+        startRepeat: startRepeat,
+        endBarline: endBarline,
+        marks: marks,
+        volta: volta,
+      );
 
   /// Sets the context for the measure and returns a list of musical symbol metrics.
   ///

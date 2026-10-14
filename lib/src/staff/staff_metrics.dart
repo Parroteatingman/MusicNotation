@@ -98,6 +98,7 @@ class StaffMetrics {
       staffExtendWidth: staffExtendWidth,
       caretIndex: caretIndex,
       caretColor: caretColor,
+      paths: layout.metrics.paths,
     );
   }
 }

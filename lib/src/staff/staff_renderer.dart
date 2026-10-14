@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:simple_sheet_music/src/constants.dart';
+import 'package:simple_sheet_music/src/glyph_path.dart';
 import 'package:simple_sheet_music/src/measure/barline.dart';
+import 'package:simple_sheet_music/src/measure/measure_marks.dart';
 import 'package:simple_sheet_music/src/measure/measure_renderer.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_renderer.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/single_note/note.dart';
 
 /// The renderer for a staff, which is responsible for rendering measures and handling hit tests.
 class StaffRenderer {
-  const StaffRenderer(
+  StaffRenderer(
     this.measureRendereres, {
     this.showBarlines = true,
     this.showEndBarline = false,
@@ -15,7 +17,18 @@ class StaffRenderer {
     this.staffExtendWidth,
     this.caretIndex,
     this.caretColor,
+    this.paths,
   });
+
+  /// The music font's glyphs, for the signs over the line (segno, coda).
+  final GlyphPaths? paths;
+
+  /// The marks over the line — endings, signs, rehearsal marks, words —
+  /// placed once.
+  late final List<PlacedMark> marks =
+      paths == null
+      ? const []
+      : MarkBand.place(measureRendereres, paths!, lineEnd: staffExtendWidth);
 
   final List<MeasureRenderer> measureRendereres;
   final bool showBarlines;
@@ -105,6 +118,9 @@ class StaffRenderer {
     _renderCaret(canvas);
     for (final tie in crossMeasureTies) {
       _drawCrossMeasureTie(canvas, tie);
+    }
+    for (final mark in marks) {
+      mark.paint(canvas);
     }
   }
 

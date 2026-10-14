@@ -305,6 +305,28 @@ class SheetMusicLayout {
     return boxes;
   }
 
+  /// Every mark over the lines — endings, segno and coda signs, rehearsal
+  /// marks, words — where it is drawn, in the widget's coordinates.
+  List<SheetMarkBox> markBoxes() {
+    final scale = canvasScale;
+    final boxes = <SheetMarkBox>[];
+    var measureIndex = 0;
+    final staffs = staffRenderers;
+    for (var line = 0; line < staffs.length; line++) {
+      for (final mark in staffs[line].marks) {
+        final r = mark.rect;
+        boxes.add(SheetMarkBox(
+          kind: mark.kind,
+          line: line,
+          measure: measureIndex + mark.measure,
+          rect: Rect.fromLTRB(r.left * scale, r.top * scale, r.right * scale, r.bottom * scale),
+        ));
+      }
+      measureIndex += staffs[line].measureRendereres.length;
+    }
+    return boxes;
+  }
+
   /// The scale factor for the width of the sheet music.
   double get _widthScale => distributeSymbolsToFullWidth
       ? (widgetWidth -

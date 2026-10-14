@@ -1,5 +1,7 @@
 import 'dart:ui';
 
+import 'package:simple_sheet_music/src/measure/measure_marks.dart';
+
 /// What kind of symbol a [SheetSymbolBox] is.
 enum SheetSymbolKind { note, rest, chord }
 
@@ -70,4 +72,25 @@ class SheetSymbolBox {
 
   /// Across the middle of the heads: where a label under the note centres.
   double get centerX => headBounds.center.dx;
+}
+
+/// Where a mark over a line was drawn — an ending's bracket or label, a
+/// segno or coda sign, a rehearsal mark, words — in the widget's own
+/// coordinates.
+class SheetMarkBox {
+  const SheetMarkBox({
+    required this.kind,
+    required this.line,
+    required this.measure,
+    required this.rect,
+  });
+
+  final SheetMarkKind kind;
+
+  /// The line of the page it is over, from 0.
+  final int line;
+
+  /// The measure it belongs to, counted from 0 across the page.
+  final int measure;
+  final Rect rect;
 }

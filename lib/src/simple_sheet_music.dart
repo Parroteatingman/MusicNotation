@@ -185,13 +185,7 @@ class SimpleSheetMusic extends StatefulWidget {
     final line = SheetMusicMetrics(
       [
         for (final measure in measures)
-          measure.isNewLine
-              ? Measure(
-                  measure.musicalSymbols,
-                  startRepeat: measure.startRepeat,
-                  endBarline: measure.endBarline,
-                )
-              : measure,
+          measure.isNewLine ? measure.withNewLine(false) : measure,
       ],
       ClefType.treble,
       KeySignatureType.cMajor,
@@ -317,6 +311,11 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
   double? get debugCanvasScale =>
       _cachedRenderer?.sheetMusicLayout.canvasScale;
 
+  /// Where the marks over the lines (endings, signs, rehearsal marks,
+  /// words) were last drawn; empty before the first layout.
+  List<SheetMarkBox> get markBoxes =>
+      _cachedRenderer?.sheetMusicLayout.markBoxes() ?? const [];
+
   @override
   void initState() {
     super.initState();
@@ -369,6 +368,8 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
           measure.isNewLine,
           measure.startRepeat,
           measure.endBarline,
+          Object.hashAll(measure.marks),
+          measure.volta,
           measure.musicalSymbols.length,
           Object.hashAll(
             measure.musicalSymbols.map(identityHashCode),

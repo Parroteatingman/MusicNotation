@@ -4,6 +4,7 @@ import 'package:simple_sheet_music/src/extension/list_extension.dart';
 import 'package:simple_sheet_music/src/glyph_metadata.dart';
 import 'package:simple_sheet_music/src/layout/note_spacing.dart';
 import 'package:simple_sheet_music/src/measure/barline.dart';
+import 'package:simple_sheet_music/src/measure/measure_marks.dart';
 import 'package:simple_sheet_music/src/measure/measure_renderer.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_metrics.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_renderer.dart';
@@ -25,7 +26,13 @@ class MeasureMetrics {
     required this.isNewLine,
     this.spacing = SpacingReference.none,
     this.endBarline,
+    this.marks = const [],
+    this.volta,
   });
+
+  /// What is printed over the measure besides its notes (see [MarkBand]).
+  final List<MeasureMark> marks;
+  final Volta? volta;
 
   /// How the measure ends; null leaves it to the staff.
   final BarlineType? endBarline;
@@ -94,8 +101,12 @@ class MeasureMetrics {
   /// Returns the height of the upper part of the measure.
   double get _measureUpperHeight => metadata.measureUpperHeight;
 
-  /// Returns the maximum height of the measure upper part.
-  double get upperHeight => max(_symbolMaximumUpperHeight, _measureUpperHeight);
+  /// Returns the maximum height of the measure upper part: with marks over
+  /// it, the band they are set in.
+  double get upperHeight => max(
+        max(_symbolMaximumUpperHeight, _measureUpperHeight),
+        marks.isEmpty && volta == null ? 0 : MarkBand.upperHeight,
+      );
 
   /// Gets the maximum lower height among all the musical symbols in the measure.
   double get _symbolMaximumLowerHeight =>

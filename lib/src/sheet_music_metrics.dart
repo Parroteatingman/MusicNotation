@@ -61,6 +61,8 @@ class SheetMusicMetrics {
           isNewLine: measures[index].isNewLine,
           spacing: spacing,
           endBarline: measures[index].endBarline,
+          marks: measures[index].marks,
+          volta: measures[index].volta,
         ),
     ];
 

@@ -8,10 +8,13 @@ export '/src/font_types.dart' show FontType;
 export '/src/glyph_path.dart' show GlyphPaths;
 export '/src/measure/barline.dart' show BarlineType;
 export '/src/measure/measure.dart' show Measure;
+export '/src/measure/measure_marks.dart'
+    show MeasureMark, MeasureMarkKind, Volta, SheetMarkKind;
 export '/src/music_objects/clef/clef.dart' show Clef;
 export '/src/music_objects/clef/clef_type.dart' show ClefType;
 export '/src/simple_sheet_music.dart' show SimpleSheetMusic, SimpleSheetMusicState;
-export '/src/sheet_symbol_box.dart' show SheetSymbolBox, SheetSymbolKind;
+export '/src/sheet_symbol_box.dart'
+    show SheetSymbolBox, SheetSymbolKind, SheetMarkBox;
 export 'src/music_objects/key_signature/key_signature.dart' show KeySignature;
 export 'src/music_objects/key_signature/keysignature_type.dart'
     show KeySignatureType;
