@@ -16,6 +16,7 @@ import 'package:simple_sheet_music/src/music_objects/notes/noteflag_type.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/notehead_type.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/positions.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/stem_direction.dart';
+import 'package:simple_sheet_music/src/music_objects/notes/tie_type.dart';
 import 'package:simple_sheet_music/src/musical_context.dart';
 import 'package:simple_sheet_music/src/sheet_music_layout.dart';
 
@@ -27,7 +28,33 @@ class ChordNote implements MusicalSymbol {
     this.margin = const EdgeInsets.all(10),
     this.color = Colors.black,
     this.stemDirection,
+    this.isDotted = false,
+    this.tuplet,
+    this.tie,
   });
+
+  /// Whether the chord has a dot (extends duration by 50%): one beside
+  /// every head.
+  final bool isDotted;
+
+  /// Tuplet grouping (e.g., 3 for triplet). Null means no tuplet.
+  final int? tuplet;
+
+  /// Tie connection type for the chord: each of its notes is tied to the
+  /// same pitch in the chord (or note) next to it.
+  final TieType? tie;
+
+  /// The same chord drawn all in [ink].
+  ChordNote withColor(Color ink) => ChordNote(
+        noteParts,
+        noteDuration: noteDuration,
+        margin: margin,
+        color: ink,
+        stemDirection: stemDirection,
+        isDotted: isDotted,
+        tuplet: tuplet,
+        tie: tie,
+      );
 
   @override
   final EdgeInsets margin;
@@ -253,8 +280,11 @@ class ChordNoteMetrics implements MusicalSymbolMetrics {
       _accidentalsWidthSum + (_hasLeftColumn ? _columnStep : 0);
 
   @override
-  double get durationUnits =>
-      NoteSpacing.unitsOf(note.noteDuration.quarterUnits);
+  double get durationUnits => NoteSpacing.unitsOf(
+        note.noteDuration.quarterUnits,
+        isDotted: note.isDotted,
+        tuplet: note.tuplet,
+      );
 
   @override
   double get lowerHeight => _bbox.bottom;
@@ -276,7 +306,7 @@ class ChordNoteMetrics implements MusicalSymbolMetrics {
 
   /// Gets the right coordinate of the bounding box.
   double get _right => [
-        noteHeadsBbox.right,
+        noteHeadsBbox.right + (note.isDotted ? _noteHeadWidth * 0.8 : 0),
         (_flagBbox?.right ?? double.negativeInfinity),
         _accidentalsBbox.right,
       ].max;
@@ -433,6 +463,12 @@ class ChordNoteMetrics implements MusicalSymbolMetrics {
   /// Checks if the chord note has a stem.
   bool get hasStem => note.noteDuration.hasStem;
 
+  /// Whether the stem goes up.
+  bool get isStemUp => _isStemUp;
+
+  /// The heads, each with its note, as set at the symbol's origin.
+  List<ChordNoteHeadMetrics> get noteHeads => _noteHeads;
+
   /// Checks if the stem direction is up.
   bool get _isStemUp => note.stemDirection?.isUp ?? _defaultStemDirection.isUp;
 
@@ -539,6 +575,7 @@ class ChordNoteRenderer implements MusicalSymbolRenderer {
   @override
   void render(Canvas canvas) {
     _renderNoteHead(canvas);
+    _renderDots(canvas);
     _renderFlag(canvas);
     _renderAccidentals(canvas);
     _renderStem(canvas);
@@ -556,7 +593,36 @@ class ChordNoteRenderer implements MusicalSymbolRenderer {
     }
   }
 
-  Rect get _renderArea => throw UnimplementedError();
+  Rect get _renderArea => note.noteHeadsBbox.shift(_renderOffset);
+
+  /// Where the chord is drawn from: its x and its staff's middle line,
+  /// with its left margin.
+  Offset get renderOffset => _renderOffset;
+
+  /// Around all the heads, as drawn.
+  Rect get noteHeadsRenderBounds => _noteHeadRenderArea;
+
+  /// One dot right of the heads for each line or space they stand on.
+  void _renderDots(Canvas canvas) {
+    if (!note.note.isDotted) return;
+    final right = _noteHeadRenderArea.right;
+    final radius = Constants.staffSpace * 0.18;
+    final paint = Paint()..color = note.note.color;
+    final drawn = <double>{};
+    for (final head in note.noteHeads) {
+      final position =
+          StavePosition(head.pitch, note.context.clefType).localPosition;
+      // A head on a line has its dot in the space above.
+      final step = position.isEven ? position + 1 : position;
+      final y = staffLineCenterY - step * Constants.staffSpace / 2;
+      if (!drawn.add(y)) continue;
+      canvas.drawCircle(
+        Offset(right + Constants.staffSpace * 0.35, y),
+        radius,
+        paint,
+      );
+    }
+  }
 
   /// The heads as they are drawn, one for each note of the chord.
   List<Path> get noteHeadRenderPaths =>

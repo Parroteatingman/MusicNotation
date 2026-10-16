@@ -24,12 +24,17 @@ class SheetSymbolBox {
     this.measureLeft = 0,
     this.measureRight = 0,
     this.chordLabel,
+    this.staff = 0,
   });
 
   /// The symbol's place among the page's notes, rests and chords, from 0.
   /// On a page without chords it is the index [SimpleSheetMusic.onSymbolTap]
-  /// reports.
+  /// reports. On a staff system it is counted on the symbol's own [staff].
   final int order;
+
+  /// The staff of a system the symbol is on, from 0 at the top; 0 on a page
+  /// of single staffs.
+  final int staff;
 
   /// The line of the page the symbol is on, from 0.
   final int line;

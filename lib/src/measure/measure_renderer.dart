@@ -7,6 +7,7 @@ import 'package:simple_sheet_music/src/measure/measure_metrics.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_renderer.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/chord_note/chord_note.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/note_duration.dart';
+import 'package:simple_sheet_music/src/music_objects/notes/note_pitch.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/single_note/note.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/tie_type.dart';
 import 'package:simple_sheet_music/src/music_objects/rest/rest.dart';
@@ -23,7 +24,13 @@ class MeasureRenderer {
     this.stretch = 1,
     this.squeeze = 1,
     this.marginScale = 1,
+    this.widthOverride,
   });
+
+  /// The measure's width when something other than its own symbols sets it:
+  /// a measure of a staff system is as wide as the system's measure, its
+  /// notes placed where the other staffs' notes at the same beat are.
+  final double? widthOverride;
 
   final List<MusicalSymbolRenderer> symbolRenderers;
   final MeasureMetrics measureMetrics;
@@ -76,20 +83,27 @@ class MeasureRenderer {
       .length;
 
   /// Renders the measure on the given [canvas] with the specified [size].
+  ///
+  /// [inkOf] draws a symbol, by its place in [symbolRenderers], in another
+  /// colour than its own — a note lit while it sounds — without the measure
+  /// being laid out again. Null keeps every symbol's own colour.
   void render(
     Canvas canvas,
     Size size, {
     bool suppressLeadingTie = false,
     bool suppressTrailingTie = false,
     bool drawStaffLines = true,
+    Color? Function(int symbol)? inkOf,
   }) {
     // The staff draws its own lines right across when it is extended to the
     // full width; drawing them here as well would lay a second half-opaque
     // stroke over the part that holds notes, and the line would change shade
     // where the music stops.
     if (drawStaffLines) _renderStaffLine(canvas);
-    for (final symbol in symbolRenderers) {
-      symbol.render(canvas);
+    for (var i = 0; i < symbolRenderers.length; i++) {
+      final symbol = symbolRenderers[i];
+      final ink = inkOf?.call(i);
+      (ink == null ? symbol : recolored(symbol, ink)).render(canvas);
     }
     _renderBeams(canvas);
     _renderTies(
@@ -466,6 +480,55 @@ class MeasureRenderer {
         !suppressLeadingTie) {
       _drawLeadingTie(canvas, noteRenderers.first);
     }
+    _renderChordTies(
+      canvas,
+      suppressLeadingTie: suppressLeadingTie,
+      suppressTrailingTie: suppressTrailingTie,
+    );
+  }
+
+  /// The notes and chords of the measure, in order.
+  List<MusicalSymbolRenderer> get pitchedRenderers => [
+        for (final symbol in symbolRenderers)
+          if (symbol is NoteRenderer || symbol is ChordNoteRenderer) symbol,
+      ];
+
+  /// Ties out of chords: each note of the chord to the same pitch in the
+  /// chord or note after it, or to the barline when that is in the next
+  /// measure; and into a measure's first chord from the barline.
+  void _renderChordTies(
+    Canvas canvas, {
+    required bool suppressLeadingTie,
+    required bool suppressTrailingTie,
+  }) {
+    final pitched = pitchedRenderers;
+    final ink = measureMetrics.staffLineThickness * 2;
+    for (var i = 0; i < pitched.length; i++) {
+      final current = pitched[i];
+      if (current is! ChordNoteRenderer) continue;
+      final tie = current.note.note.tie;
+      if (tie == null || !tie.isStart) continue;
+      final next = i + 1 < pitched.length ? pitched[i + 1] : null;
+      if (next == null && suppressTrailingTie) continue;
+      drawChordTies(
+        canvas,
+        current,
+        next,
+        strokeWidth: ink,
+        endX: measureOriginX + width - Constants.staffSpace * 0.3,
+      );
+    }
+    if (pitched.isNotEmpty && !suppressLeadingTie) {
+      final first = pitched.first;
+      if (first is ChordNoteRenderer && first.note.note.tie == TieType.stop) {
+        drawLeadingChordTies(
+          canvas,
+          first,
+          strokeWidth: ink,
+          startX: measureOriginX + Constants.staffSpace * 0.2,
+        );
+      }
+    }
   }
 
   void _drawTie(Canvas canvas, NoteRenderer start, NoteRenderer? end) {
@@ -527,6 +590,8 @@ class MeasureRenderer {
 
   /// The width of the measure.
   double get width {
+    final fixed = widthOverride;
+    if (fixed != null) return fixed;
     var advances = 0.0;
     for (final symbol in measureMetrics.musicalSymbolsMetricses) {
       advances += measureMetrics.advanceIn(
@@ -545,6 +610,7 @@ class MeasureRenderer {
   /// Gets the tuplet value for any symbol renderer (Note or Rest).
   int? _getTuplet(MusicalSymbolRenderer sr) {
     if (sr is NoteRenderer) return sr.note.note.tuplet;
+    if (sr is ChordNoteRenderer) return sr.note.note.tuplet;
     if (sr is RestRenderer) return sr.restMetrics.rest.tuplet;
     return null;
   }
@@ -558,10 +624,15 @@ class MeasureRenderer {
 
   /// The runs of notes and rests under one tuplet bracket.
   List<List<MusicalSymbolRenderer>> _tupletGroups() {
-    // Collect only note/rest renderers (skip clef, key sig, etc.)
+    // Collect only note/chord/rest renderers (skip clef, key sig, etc.)
     final musicRenderers = <MusicalSymbolRenderer>[];
     for (final sr in symbolRenderers) {
       if (sr is NoteRenderer || sr is RestRenderer) musicRenderers.add(sr);
+      // A chord joins only a tuplet of its own: a chord written before
+      // chords had tuplets stays out of the notes' runs.
+      if (sr is ChordNoteRenderer && sr.note.note.tuplet != null) {
+        musicRenderers.add(sr);
+      }
     }
 
     // Group consecutive symbols with the same non-null tuplet value. Do not
@@ -610,12 +681,26 @@ class MeasureRenderer {
         stemUp = sr.note.isStemUp;
         break;
       }
+      if (sr is ChordNoteRenderer) {
+        stemUp = sr.note.isStemUp;
+        break;
+      }
     }
+    double chordEnd(ChordNoteRenderer sr, {required bool up}) {
+      final tip = sr.note.stemTipOffset;
+      if (tip != null) return tip.dy + sr.renderOffset.dy;
+      final heads = sr.noteHeadsRenderBounds;
+      return up ? heads.top : heads.bottom;
+    }
+
     if (stemUp) {
       double minY = double.infinity;
       for (final sr in group) {
         if (sr is NoteRenderer) {
           final tipY = sr.note.stemTipOffset.dy + sr.renderOffset.dy;
+          if (tipY < minY) minY = tipY;
+        } else if (sr is ChordNoteRenderer) {
+          final tipY = chordEnd(sr, up: true);
           if (tipY < minY) minY = tipY;
         } else if (sr is RestRenderer) {
           final topY = sr.renderArea.top;
@@ -628,6 +713,9 @@ class MeasureRenderer {
     for (final sr in group) {
       if (sr is NoteRenderer) {
         final tipY = sr.note.stemTipOffset.dy + sr.renderOffset.dy;
+        if (tipY > maxY) maxY = tipY;
+      } else if (sr is ChordNoteRenderer) {
+        final tipY = chordEnd(sr, up: false);
         if (tipY > maxY) maxY = tipY;
       } else if (sr is RestRenderer) {
         final botY = sr.renderArea.bottom;
@@ -676,11 +764,52 @@ class MeasureRenderer {
     return bottoms;
   }
 
+  /// How far up each of [symbolRenderers] reaches, in canvas units: the
+  /// symbol itself with its stem and flag, the beam over it, the tuplet
+  /// bracket over it. The mirror of [symbolInkBottoms]; a staff set over
+  /// this one keeps clear of it.
+  List<double> symbolInkTops() {
+    final tops = <double>[
+      for (final symbol in symbolRenderers)
+        if (symbol is NoteRenderer)
+          // The note's own ink: a chord name over it is the band's.
+          symbol.staffLineCenterY + symbol.note.bbox.top
+        else if (symbol is ChordNoteRenderer)
+          symbol.staffLineCenterY - symbol.note.upperHeight
+        else if (symbol is RestRenderer)
+          symbol.renderArea.top
+        else
+          double.infinity,
+    ];
+    void raise(MusicalSymbolRenderer symbol, double y) {
+      final i = symbolRenderers.indexOf(symbol);
+      if (i >= 0 && y < tops[i]) tops[i] = y;
+    }
+
+    final beamThickness = measureMetrics.metadata.beamThickness;
+    for (final group in _beamGroups()) {
+      final beam = _beamLineOf(group);
+      if (!beam.stemUp) continue;
+      for (var i = 0; i < group.length; i++) {
+        raise(group[i], beam.yAt(beam.stemRoots[i].dx) - beamThickness / 2);
+      }
+    }
+    for (final group in _tupletGroups()) {
+      final place = _tupletBracketPlace(group);
+      if (!place.stemUp) continue;
+      for (final symbol in group) {
+        raise(symbol, place.y - Constants.staffSpace * 0.55);
+      }
+    }
+    return tops;
+  }
+
   /// Get the left X of a symbol renderer for bracket drawing.
   double _getSymbolLeftX(MusicalSymbolRenderer sr) {
     if (sr is NoteRenderer) {
       return sr.renderOffset.dx + sr.note.margin.left / scale;
     }
+    if (sr is ChordNoteRenderer) return sr.noteHeadsRenderBounds.left;
     if (sr is RestRenderer) {
       return sr.renderArea.left;
     }
@@ -689,6 +818,7 @@ class MeasureRenderer {
 
   /// Get the right X of a symbol renderer for bracket drawing.
   double _getSymbolRightX(MusicalSymbolRenderer sr) {
+    if (sr is ChordNoteRenderer) return sr.noteHeadsRenderBounds.right;
     if (sr is NoteRenderer) {
       return sr.renderOffset.dx +
           sr.note.margin.left / scale +
@@ -710,6 +840,10 @@ class MeasureRenderer {
     for (final sr in group) {
       if (sr is NoteRenderer) {
         ink = sr.note.color;
+        break;
+      }
+      if (sr is ChordNoteRenderer) {
+        ink = sr.note.note.color;
         break;
       }
     }
@@ -800,4 +934,153 @@ class _BracketPlace {
 
   final bool stemUp;
   final double y;
+}
+
+/// [symbol] drawn in [ink] instead of its own colour, where it stands: a
+/// note, a chord or a rest; anything else as it is. A chord name over a note
+/// keeps its own colour.
+MusicalSymbolRenderer recolored(MusicalSymbolRenderer symbol, Color ink) {
+  if (symbol is NoteRenderer) {
+    final note = symbol.note;
+    return NoteMetrics(
+      note.note.withColor(ink),
+      note.context,
+      note.metadata,
+      note.paths,
+    ).renderer(
+      symbol.layout,
+      staffLineCenterY: symbol.staffLineCenterY,
+      symbolX: symbol.symbolX,
+    );
+  }
+  if (symbol is ChordNoteRenderer) {
+    final chord = symbol.note;
+    return ChordNoteMetrics(
+      chord.note.withColor(ink),
+      chord.context,
+      chord.metadata,
+      chord.path,
+    ).renderer(
+      symbol.layout,
+      staffLineCenterY: symbol.staffLineCenterY,
+      symbolX: symbol.symbolX,
+    );
+  }
+  if (symbol is RestRenderer) {
+    final rest = symbol.restMetrics;
+    return RestMetrics(
+      rest.rest.withColor(ink),
+      rest.context,
+      rest.metadata,
+      rest.paths,
+    ).renderer(
+      symbol.layout,
+      staffLineCenterY: symbol.staffLineCenterY,
+      symbolX: symbol.symbolX,
+    );
+  }
+  return symbol;
+}
+
+/// The heads of a note or a chord as drawn, each with its pitch.
+List<MapEntry<Pitch, Rect>> drawnHeads(MusicalSymbolRenderer symbol) {
+  if (symbol is NoteRenderer) {
+    return [MapEntry(symbol.note.pitch, symbol.noteHeadBounds)];
+  }
+  if (symbol is ChordNoteRenderer) {
+    final offset = symbol.renderOffset;
+    return [
+      for (final head in symbol.note.noteHeads)
+        MapEntry(head.pitch, head.noteHeadRect.shift(offset)),
+    ];
+  }
+  return const [];
+}
+
+/// Which way the tie on each of [heads] bends, as Gould sets a chord's
+/// ties: the upper half up, the lower half down; a lone head away from its
+/// stem.
+List<bool> _bendsDown(List<MapEntry<Pitch, Rect>> heads, bool stemUp) {
+  if (heads.length == 1) return [stemUp];
+  final order = List<int>.generate(heads.length, (i) => i)
+    ..sort((a, b) => heads[a].key.position.compareTo(heads[b].key.position));
+  final down = List<bool>.filled(heads.length, false);
+  for (var rank = 0; rank < order.length; rank++) {
+    down[order[rank]] = rank < order.length / 2;
+  }
+  return down;
+}
+
+void _drawTieArc(
+  Canvas canvas,
+  Color color,
+  double strokeWidth,
+  double startX,
+  double endX,
+  double y,
+  bool down,
+) {
+  const space = Constants.staffSpace;
+  final baseline = y + space * (down ? 0.3 : -0.3);
+  final arch = space * 0.55 * (down ? 1 : -1);
+  final path = Path()
+    ..moveTo(startX, baseline)
+    ..quadraticBezierTo((startX + endX) / 2, baseline + arch, endX, baseline);
+  canvas.drawPath(
+    path,
+    Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round,
+  );
+}
+
+/// The ties out of [start]: each of its notes to the same pitch in [end]
+/// (a chord or a note), or on to [endX] when there is none after it.
+void drawChordTies(
+  Canvas canvas,
+  ChordNoteRenderer start,
+  MusicalSymbolRenderer? end, {
+  required double strokeWidth,
+  required double endX,
+}) {
+  const space = Constants.staffSpace;
+  final heads = drawnHeads(start);
+  final targets = end == null ? null : drawnHeads(end);
+  final down = _bendsDown(heads, start.note.isStemUp);
+  for (var i = 0; i < heads.length; i++) {
+    final head = heads[i];
+    double to;
+    if (targets == null) {
+      to = endX;
+    } else {
+      final match = targets.where((t) => t.key == head.key);
+      if (match.isEmpty) continue;
+      to = match.first.value.left - space * 0.1;
+    }
+    _drawTieArc(canvas, start.note.note.color, strokeWidth,
+        head.value.right + space * 0.1, to, head.value.center.dy, down[i]);
+  }
+}
+
+/// The ties into [end] from the measure's start: a tie whose first note is
+/// on the line before.
+void drawLeadingChordTies(
+  Canvas canvas,
+  ChordNoteRenderer end, {
+  required double strokeWidth,
+  required double startX,
+}) {
+  const space = Constants.staffSpace;
+  final heads = drawnHeads(end);
+  final down = _bendsDown(heads, end.note.isStemUp);
+  for (var i = 0; i < heads.length; i++) {
+    final head = heads[i];
+    // From just before the chord: on a line's first measure the clef and
+    // key signature stand between the barline and the chord.
+    final from = max(startX, head.value.left - space * 2.2);
+    _drawTieArc(canvas, end.note.note.color, strokeWidth, from,
+        head.value.left - space * 0.1, head.value.center.dy, down[i]);
+  }
 }

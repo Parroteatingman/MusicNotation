@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:core';
 
 import 'package:flutter/foundation.dart';
@@ -8,12 +7,12 @@ import 'package:flutter/services.dart';
 import 'package:simple_sheet_music/src/constants.dart';
 import 'package:simple_sheet_music/src/glyph_metadata.dart';
 import 'package:simple_sheet_music/src/glyph_path.dart';
+import 'package:simple_sheet_music/src/sheet_music_font.dart';
 import 'package:simple_sheet_music/src/measure/measure.dart';
 import 'package:simple_sheet_music/src/music_objects/clef/clef_type.dart';
 import 'package:simple_sheet_music/src/sheet_music_metrics.dart';
 import 'package:simple_sheet_music/src/sheet_music_renderer.dart';
 import 'package:simple_sheet_music/src/sheet_symbol_box.dart';
-import 'package:xml/xml.dart';
 
 import 'font_types.dart';
 import 'music_objects/interface/musical_symbol.dart';
@@ -152,7 +151,7 @@ class SimpleSheetMusic extends StatefulWidget {
   /// draws on its first frame. The parse runs on a background isolate; a
   /// staff shown meanwhile waits for the same read rather than start one.
   static Future<void> preloadFont([FontType fontType = FontType.bravura]) =>
-      _SheetMusicFont.load(fontType);
+      SheetMusicFont.load(fontType);
 
   /// How wide [measures] are, in points, set as one line at [canvasScale]
   /// (font units to points; a staff space is 250) with every note given the
@@ -171,7 +170,7 @@ class SimpleSheetMusic extends StatefulWidget {
     List<Measure>? spacingFrom,
     FontType fontType = FontType.bravura,
   }) {
-    final font = _SheetMusicFont.ready(fontType);
+    final font = SheetMusicFont.ready(fontType);
     if (font == null || measures.isEmpty) return null;
     final spacing = spacingFrom == null
         ? null
@@ -207,77 +206,6 @@ class SimpleSheetMusic extends StatefulWidget {
 
   @override
   SimpleSheetMusicState createState() => SimpleSheetMusicState();
-}
-
-/// The state class for the SimpleSheetMusic widget.
-///
-/// This class manages the state of the SimpleSheetMusic widget and handles the initialization,
-/// font asset loading, and building of the widget.
-/// The font's glyphs and metrics, read and parsed once per font for the
-/// life of the process. The SVG is close to 2 MB, so a page holding a
-/// dozen staffs (a sheet of all twelve keys) used to parse it a dozen
-/// times over and stall while it did.
-class _SheetMusicFont {
-  const _SheetMusicFont(this.glyphPath, this.metadata);
-
-  final GlyphPaths glyphPath;
-  final GlyphMetadata metadata;
-
-  static final Map<FontType, Future<_SheetMusicFont>> _loading = {};
-  static final Map<FontType, _SheetMusicFont> _ready = {};
-
-  /// The parsed font, already there for every staff after the first.
-  static _SheetMusicFont? ready(FontType fontType) => _ready[fontType];
-
-  static Future<_SheetMusicFont> load(FontType fontType) {
-    return _loading.putIfAbsent(fontType, () async {
-      try {
-        final xml = await rootBundle.loadString(fontType.svgPath);
-        final json = await rootBundle.loadString(fontType.metadataPath);
-        final parsed = await _parse(xml, json);
-        final font = _SheetMusicFont(
-          GlyphPaths(parsed.glyphs),
-          GlyphMetadata(parsed.metadata),
-        );
-        _ready[fontType] = font;
-        return font;
-      } catch (_) {
-        // A failed read must not poison later attempts.
-        _loading.removeWhere((key, _) => key == fontType);
-        rethrow;
-      }
-    });
-  }
-
-  /// The glyphs and the metadata, parsed off the UI thread: the SVG is
-  /// about 2 MB and the metadata 0.75 MB, and parsing them on the main
-  /// isolate stalled the first staff shown (a hitch on the first 琶音 or
-  /// 音阶 layer, chord card, lick…). `compute` hands the result back
-  /// without copying it (the worker exits with it); should the worker
-  /// fail, the parse runs here as it always did.
-  static Future<_ParsedFont> _parse(String xml, String json) async {
-    try {
-      return await compute(_parseInWorker, <String>[xml, json]);
-    } on Object catch (_) {
-      return _parseNow(xml, json);
-    }
-  }
-
-  static _ParsedFont _parseInWorker(List<String> sources) =>
-      _parseNow(sources[0], sources[1]);
-
-  static _ParsedFont _parseNow(String xml, String json) => _ParsedFont(
-        XmlDocument.parse(xml).findAllElements('glyph').toSet(),
-        jsonDecode(json) as Map<String, dynamic>,
-      );
-}
-
-/// A font as parsed, before it is wrapped for drawing.
-class _ParsedFont {
-  const _ParsedFont(this.glyphs, this.metadata);
-
-  final Set<XmlElement> glyphs;
-  final Map<String, dynamic> metadata;
 }
 
 class SimpleSheetMusicState extends State<SimpleSheetMusic> {
@@ -320,7 +248,7 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
   void initState() {
     super.initState();
     // Already parsed: draw on the first frame, with no spinner between.
-    final ready = _SheetMusicFont.ready(fontType);
+    final ready = SheetMusicFont.ready(fontType);
     if (ready != null) {
       _glyphPath = ready.glyphPath;
       _metadata = ready.metadata;
@@ -329,7 +257,7 @@ class SimpleSheetMusicState extends State<SimpleSheetMusic> {
   }
 
   Future<void> _load() async {
-    final font = await _SheetMusicFont.load(fontType);
+    final font = await SheetMusicFont.load(fontType);
     if (!mounted) {
       return;
     }

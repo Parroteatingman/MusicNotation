@@ -126,6 +126,47 @@ class BarlinePainter {
   }
 }
 
+extension BarlineConnector on BarlinePainter {
+  /// The lines of an end barline of [type] whose right edge is [right],
+  /// drawn from [top] to [bottom] — across the gap between two staffs a
+  /// barline runs through (a piano's two staffs). Dots stay on the staffs.
+  void connect(
+    Canvas canvas,
+    Color color,
+    BarlineType type,
+    double right,
+    double top,
+    double bottom, {
+    bool shareThick = false,
+  }) {
+    final paint = Paint()..color = color;
+    void line(double left, double width) => canvas.drawRect(
+          Rect.fromLTRB(left, top, left + width, bottom),
+          paint,
+        );
+    switch (type) {
+      case BarlineType.single:
+        line(right - thin, thin);
+        break;
+      case BarlineType.doubleLine:
+        line(right - thin, thin);
+        line(right - 2 * thin - BarlinePainter.separation, thin);
+        break;
+      case BarlineType.finalLine:
+        line(right - thick, thick);
+        line(right - thick - BarlinePainter.separation - thin, thin);
+        break;
+      case BarlineType.repeatEnd:
+        final thinLeft = (shareThick ? right : right - thick) -
+            BarlinePainter.separation -
+            thin;
+        if (!shareThick) line(right - thick, thick);
+        line(thinLeft, thin);
+        break;
+    }
+  }
+}
+
 /// The `‖:` a measure opens with: set like a symbol so the notes make room
 /// for it, after the clef, key and time signature a measure starts with.
 class RepeatStartMetrics implements MusicalSymbolMetrics {

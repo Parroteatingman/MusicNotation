@@ -5,6 +5,7 @@ import 'package:simple_sheet_music/src/measure/barline.dart';
 import 'package:simple_sheet_music/src/measure/measure_marks.dart';
 import 'package:simple_sheet_music/src/measure/measure_renderer.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_renderer.dart';
+import 'package:simple_sheet_music/src/music_objects/notes/chord_note/chord_note.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/single_note/note.dart';
 
 /// The renderer for a staff, which is responsible for rendering measures and handling hit tests.
@@ -19,7 +20,13 @@ class StaffRenderer {
     this.caretColor,
     this.paths,
     this.chordLift = 0,
+    this.staffLinesFrom = 0,
   });
+
+  /// Where the staff lines start when they are drawn across to
+  /// [staffExtendWidth]: the page's left edge, or — on a staff of a system
+  /// with a brace before it — the system's opening line.
+  final double staffLinesFrom;
 
   /// How far the line's chord names, and the marks over them, are raised
   /// (see StaffMetrics.chordLift).
@@ -81,19 +88,35 @@ class StaffRenderer {
       );
 
   /// Renders the staff on the given canvas with the specified size and font family.
-  void render(Canvas canvas, Size size) {
+  ///
+  /// [inkOf] draws a note, chord or rest in another colour than its own, by
+  /// its measure on the staff and its place among that measure's symbols
+  /// (see [MeasureRenderer.render]).
+  void render(
+    Canvas canvas,
+    Size size, {
+    Color? Function(int measure, int symbol)? inkOf,
+  }) {
     final suppressedLeadingTies = <int>{};
     final suppressedTrailingTies = <int>{};
     final crossMeasureTies = <_CrossMeasureTie>[];
+    final crossChordTies = <_CrossChordTie>[];
 
     for (int i = 0; i < measureRendereres.length - 1; i++) {
       final crossTie =
           _buildCrossMeasureTie(measureRendereres[i], measureRendereres[i + 1]);
-      if (crossTie == null) continue;
-
+      if (crossTie != null) {
+        suppressedTrailingTies.add(i);
+        suppressedLeadingTies.add(i + 1);
+        crossMeasureTies.add(crossTie);
+        continue;
+      }
+      final chordTie =
+          _buildCrossChordTie(measureRendereres[i], measureRendereres[i + 1]);
+      if (chordTie == null) continue;
       suppressedTrailingTies.add(i);
       suppressedLeadingTies.add(i + 1);
-      crossMeasureTies.add(crossTie);
+      crossChordTies.add(chordTie);
     }
 
     // If staffExtendWidth is set, extend staff lines beyond content
@@ -109,6 +132,7 @@ class StaffRenderer {
         suppressLeadingTie: suppressedLeadingTies.contains(i),
         suppressTrailingTie: suppressedTrailingTies.contains(i),
         drawStaffLines: !extendsStaffLines,
+        inkOf: inkOf == null ? null : (symbol) => inkOf(i, symbol),
       );
     }
     _renderBarlines(canvas);
@@ -124,6 +148,10 @@ class StaffRenderer {
     _renderCaret(canvas);
     for (final tie in crossMeasureTies) {
       _drawCrossMeasureTie(canvas, tie);
+    }
+    for (final tie in crossChordTies) {
+      drawChordTies(canvas, tie.start, tie.end,
+          strokeWidth: tie.strokeWidth, endX: 0);
     }
     for (final mark in marks) {
       mark.paint(canvas);
@@ -149,6 +177,33 @@ class StaffRenderer {
     }
 
     return _CrossMeasureTie(
+      start: start,
+      end: end,
+      strokeWidth: currentMeasure.measureMetrics.staffLineThickness * 2,
+    );
+  }
+
+  /// A tie from a measure's last chord to the next measure's first chord
+  /// or note.
+  _CrossChordTie? _buildCrossChordTie(
+    MeasureRenderer currentMeasure,
+    MeasureRenderer nextMeasure,
+  ) {
+    final before = currentMeasure.pitchedRenderers;
+    final after = nextMeasure.pitchedRenderers;
+    if (before.isEmpty || after.isEmpty) return null;
+    final start = before.last;
+    final end = after.first;
+    if (start is! ChordNoteRenderer) return null;
+    final startTie = start.note.note.tie;
+    if (startTie == null || !startTie.isStart) return null;
+    final endTie = end is ChordNoteRenderer
+        ? end.note.note.tie
+        : end is NoteRenderer
+            ? end.note.note.tie
+            : null;
+    if (endTie == null || !endTie.isStop) return null;
+    return _CrossChordTie(
       start: start,
       end: end,
       strokeWidth: currentMeasure.measureMetrics.staffLineThickness * 2,
@@ -339,7 +394,7 @@ class StaffRenderer {
     ];
     for (final h in staffLineHeights) {
       canvas.drawLine(
-        Offset(0, h),
+        Offset(staffLinesFrom, h),
         Offset(extendTo, h),
         Paint()
           ..color = first.layout.lineColor
@@ -347,6 +402,18 @@ class StaffRenderer {
       );
     }
   }
+}
+
+class _CrossChordTie {
+  const _CrossChordTie({
+    required this.start,
+    required this.end,
+    required this.strokeWidth,
+  });
+
+  final ChordNoteRenderer start;
+  final MusicalSymbolRenderer end;
+  final double strokeWidth;
 }
 
 class _CrossMeasureTie {

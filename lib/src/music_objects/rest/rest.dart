@@ -46,6 +46,26 @@ class Rest implements MusicalSymbol {
   /// symbol in its own light ink.
   final Color chordLabelColor;
 
+  /// The same rest drawn in [ink], its chord name in its own colour.
+  Rest withColor(Color ink) => Rest(
+        restType,
+        margin: margin,
+        color: ink,
+        isDotted: isDotted,
+        tuplet: tuplet,
+        chordLabel: chordLabel,
+        chordLabelColor: chordLabelColor,
+      );
+
+  /// The same rest without a chord name over it.
+  Rest withoutChordLabel() => Rest(
+        restType,
+        margin: margin,
+        color: color,
+        isDotted: isDotted,
+        tuplet: tuplet,
+      );
+
   @override
   MusicalSymbolMetrics setContext(
     MusicalContext context,

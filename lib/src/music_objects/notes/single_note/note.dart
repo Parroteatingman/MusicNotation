@@ -98,6 +98,42 @@ class Note implements MusicalSymbol {
   /// The type of note head based on the note duration.
   NoteHeadType get noteHeadType => noteDuration.noteHeadType;
 
+  /// The same note drawn all in [ink] — head, stem, flag, accidental —
+  /// with its chord name in its own colour.
+  Note withColor(Color ink) => Note(
+        pitch,
+        noteDuration: noteDuration,
+        accidental: accidental,
+        margin: margin,
+        color: ink,
+        isBeamed: isBeamed,
+        forceStemUp: forceStemUp,
+        beamGroupId: beamGroupId,
+        beatPosition: beatPosition,
+        chordLabel: chordLabel,
+        chordLabelColor: chordLabelColor,
+        isDotted: isDotted,
+        tuplet: tuplet,
+        tie: tie,
+      );
+
+  /// The same note without a chord name over it.
+  Note withoutChordLabel() => Note(
+        pitch,
+        noteDuration: noteDuration,
+        accidental: accidental,
+        margin: margin,
+        color: color,
+        noteHeadColor: noteHeadColor,
+        isBeamed: isBeamed,
+        forceStemUp: forceStemUp,
+        beamGroupId: beamGroupId,
+        beatPosition: beatPosition,
+        isDotted: isDotted,
+        tuplet: tuplet,
+        tie: tie,
+      );
+
   @override
   MusicalSymbolMetrics setContext(
     MusicalContext context,

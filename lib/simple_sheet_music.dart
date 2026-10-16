@@ -32,3 +32,14 @@ export 'src/music_objects/time_signature/time_signature.dart'
     show TimeSignature, TimeSignatureSymbol;
 export 'src/music_objects/rest/rest_type.dart' show RestType;
 export 'src/music_objects/notes/tie_type.dart' show TieType;
+export 'src/system/sheet_staff.dart'
+    show
+        SheetStaff,
+        StaffGroup,
+        StaffGroupKind,
+        SheetStaffBox,
+        SheetSystemGeometry,
+        SheetSystemExtent;
+export 'src/system/simple_sheet_system.dart'
+    show SimpleSheetSystem, OnSystemSymbolTap;
+export 'src/system/staff_system_layout.dart' show SheetSymbolColor;
