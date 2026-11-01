@@ -607,12 +607,19 @@ class MeasureRenderer {
 
   void _drawLeadingTie(Canvas canvas, NoteRenderer end) {
     final endBounds = end.noteHeadBounds;
-    final tieBelow = end.note.note.tieDirection?.isDown ?? end.note.isStemUp;
+    final forced = end.note.note.tieDirection;
+    final tieBelow = forced?.isDown ?? end.note.isStemUp;
     final baselineY = tieBelow
         ? endBounds.bottom + Constants.staffSpace * 0.35
         : endBounds.top - Constants.staffSpace * 0.35;
     final archHeight = Constants.staffSpace * 0.7 * (tieBelow ? 1 : -1);
-    final startX = measureOriginX + Constants.staffSpace * 0.2;
+    // A voice's tie starts just before the note, as a chord's does: on a
+    // line's first measure the clef and key stand between the barline and
+    // the note.
+    final startX = forced == null
+        ? measureOriginX + Constants.staffSpace * 0.2
+        : max(measureOriginX + Constants.staffSpace * 0.2,
+            endBounds.left - Constants.staffSpace * 2.2);
     final endX = endBounds.left + Constants.staffSpace * 0.1;
     final controlX = (startX + endX) / 2;
     final controlY = baselineY + archHeight;
