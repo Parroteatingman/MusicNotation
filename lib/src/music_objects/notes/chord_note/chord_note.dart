@@ -590,11 +590,17 @@ class ChordNoteRenderer implements MusicalSymbolRenderer {
     this.layout, {
     required this.staffLineCenterY,
     required this.symbolX,
+    this.accidentalShift = 0,
   });
   final double staffLineCenterY;
   final double symbolX;
   final ChordNoteMetrics note;
   final SheetMusicLayout layout;
+
+  /// How far right of their usual place, left of the heads, the accidentals
+  /// are drawn (negative: further left): beside another voice's head, they
+  /// stand left of both.
+  final double accidentalShift;
 
   @override
   bool isHit(Offset position) => _renderArea.contains(position);
@@ -658,7 +664,7 @@ class ChordNoteRenderer implements MusicalSymbolRenderer {
   void _renderAccidentals(Canvas canvas) {
     for (final accidental in note.accidentalMetricses) {
       canvas.drawPath(
-        accidental.path.shift(_renderOffset),
+        accidental.path.shift(_renderOffset + Offset(accidentalShift, 0)),
         Paint()
           ..color = note.note.color
           ..strokeWidth = 2,

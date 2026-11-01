@@ -473,12 +473,18 @@ class NoteRenderer implements MusicalSymbolRenderer {
     this.layout, {
     required this.staffLineCenterY,
     required this.symbolX,
+    this.accidentalShift = 0,
   });
 
   final SheetMusicLayout layout;
   final double staffLineCenterY;
   final double symbolX;
   final NoteMetrics note;
+
+  /// How far right of its usual place, left of the head, the accidental is
+  /// drawn (negative: further left): beside another voice's head, it stands
+  /// left of both.
+  final double accidentalShift;
 
   /// Returns the scale of the canvas.
   double get canvasScale => layout.canvasScale;
@@ -602,7 +608,8 @@ class NoteRenderer implements MusicalSymbolRenderer {
   }
 
   /// Returns the path of the accidental, shifted by the render offset.
-  Path? get renderAccidentalPath => note.accidentalPath?.shift(_renderOffset);
+  Path? get renderAccidentalPath =>
+      note.accidentalPath?.shift(_renderOffset + Offset(accidentalShift, 0));
 
   void _renderStem(Canvas canvas) {
     if (!note.hasStem || note.note.isBeamed) {

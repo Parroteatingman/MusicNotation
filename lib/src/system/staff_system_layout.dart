@@ -628,12 +628,19 @@ class StaffSystemLayout {
             room += whole(s, symbols[a]);
           }
           if (k == 0) {
-            need(0, from, left(symbol) + symbol.leadingWidth);
+            need(0, from,
+                left(symbol) + symbol.leadingWidth + _leadOf(s, m, item.index));
           }
           if (k + 1 < items.length) {
             final next = symbols[items[k + 1].index];
             final to = columnOf[_key(items[k + 1].onset)]!;
-            need(from, to, room + left(next) + next.leadingWidth);
+            need(
+                from,
+                to,
+                room +
+                    left(next) +
+                    next.leadingWidth +
+                    _leadOf(s, m, items[k + 1].index));
           } else {
             need(from, endColumn, room);
           }
@@ -738,12 +745,27 @@ class StaffSystemLayout {
   /// How far right a note or chord of a staff with a voice stands of its
   /// moment, by staff, measure and symbol, in canvas units: where the two
   /// voices strike at once a second apart (or in unison), the one with its
-  /// stem up stands right of the other, the heads side by side (Gould) — its
-  /// accidentals, which are drawn with it, between the two heads.
-  late final Map<int, double> _shifts = _findShifts();
+  /// stem up stands right of the other, the heads side by side (Gould).
+  late final Map<int, double> _shifts = _beside.shifts;
 
-  Map<int, double> _findShifts() {
-    final out = <int, double>{};
+  /// How far left of where it is drawn with its note a moved accidental
+  /// stands, by staff, measure and symbol, in canvas units: where two heads
+  /// stand side by side, both notes' accidentals stand left of both heads,
+  /// each in a column of its own — the higher note's nearest the heads, the
+  /// other's left of it.
+  late final Map<int, double> _accidentalShifts = _beside.accidentals;
+
+  /// How much more room than its own accidentals take a note or chord asks
+  /// for left of its moment, by staff, measure and symbol, in canvas units:
+  /// both notes' accidentals, where two heads stand side by side.
+  late final Map<int, double> _leads = _beside.leads;
+
+  double _leadOf(int s, int m, int k) => _leads[_at(s, m, k)] ?? 0;
+
+  late final _Beside _beside = _findBeside();
+
+  _Beside _findBeside() {
+    final out = _Beside();
     for (var v = drawnStaffCount; v < staffCount; v++) {
       final b = lineOf(v);
       for (var m = 0; m < measureCount; m++) {
@@ -764,13 +786,33 @@ class StaffSystemLayout {
           final touch = lows.any((p) => highs.any((q) => (p - q).abs() <= 1));
           if (!touch) continue;
           // The stem-up one moves; the voice's when neither or both stand up.
-          // Its accidentals move with it, clear of the other's head.
           final baseMoves = _stemUp(high) && !_stemUp(low);
-          if (baseMoves) {
-            out[_at(b, m, at)] = _headWidth(low) + _besideHead(high);
+          final moved = baseMoves ? _at(b, m, at) : _at(v, m, item.index);
+          final still = baseMoves ? _at(v, m, item.index) : _at(b, m, at);
+          final movedSymbol = baseMoves ? high : low;
+          final stillSymbol = baseMoves ? low : high;
+          final shift = _headWidth(stillSymbol);
+          out.shifts[moved] = shift;
+
+          // The accidentals, left of both heads: the moved note's are drawn
+          // back by its move, the higher note's nearest the heads.
+          final movedLead = movedSymbol.leadingWidth;
+          final stillLead = stillSymbol.leadingWidth;
+          if (movedLead <= 0) continue;
+          final gap = stillLead > 0 ? _space * 0.15 : 0.0;
+          final movedNearest =
+              _topOf(movedSymbol) >= _topOf(stillSymbol) || stillLead <= 0;
+          if (movedNearest) {
+            out.accidentals[moved] = -shift;
+            if (stillLead > 0) out.accidentals[still] = -(movedLead + gap);
           } else {
-            out[_at(v, m, item.index)] = _headWidth(high) + _besideHead(low);
+            out.accidentals[moved] = -(shift + stillLead + gap);
           }
+          // Both ask for the room the two columns take, so nothing before
+          // either note runs into them.
+          final both = movedLead + stillLead + gap;
+          out.leads[moved] = both - movedLead;
+          out.leads[still] = both - stillLead;
         }
       }
     }
@@ -791,10 +833,9 @@ class StaffSystemLayout {
     return const [];
   }
 
-  /// How much further right a note moved beside another must go so its
-  /// accidentals stand clear of that note's head: their width and a gap.
-  static double _besideHead(MusicalSymbolMetrics symbol) =>
-      symbol.leadingWidth > 0 ? symbol.leadingWidth + _space * 0.2 : 0;
+  /// The highest head's staff position of a note or chord.
+  static int _topOf(MusicalSymbolMetrics symbol) =>
+      _headsOf(symbol).fold(-1 << 20, max);
 
   static bool _stemUp(MusicalSymbolMetrics symbol) {
     if (symbol is NoteMetrics) return symbol.isStemUp;
@@ -1075,6 +1116,31 @@ class StaffSystemLayout {
       ),
   ];
 
+  static MusicalSymbolRenderer _symbolRenderer(
+    MusicalSymbolMetrics symbol,
+    SheetMusicLayout layout, {
+    required double staffLineCenterY,
+    required double symbolX,
+    double? accidentalShift,
+  }) {
+    if (accidentalShift != null) {
+      if (symbol is NoteMetrics) {
+        return NoteRenderer(symbol, layout,
+            staffLineCenterY: staffLineCenterY,
+            symbolX: symbolX,
+            accidentalShift: accidentalShift);
+      }
+      if (symbol is ChordNoteMetrics) {
+        return ChordNoteRenderer(symbol, layout,
+            staffLineCenterY: staffLineCenterY,
+            symbolX: symbolX,
+            accidentalShift: accidentalShift);
+      }
+    }
+    return symbol.renderer(layout,
+        staffLineCenterY: staffLineCenterY, symbolX: symbolX);
+  }
+
   List<MeasureRenderer> _measureRenderers(
     int s,
     _Placement at,
@@ -1087,12 +1153,15 @@ class StaffSystemLayout {
         MeasureRenderer(
           [
             for (var k = 0; k < measures[m].musicalSymbolsMetricses.length; k++)
-              measures[m].musicalSymbolsMetricses[k].renderer(
-                    layout,
-                    // A rest moved off its place by the other voice.
-                    staffLineCenterY: centerY - (_lifts[_at(s, m, k)] ?? 0),
-                    symbolX: at.xs[s][m][k],
-                  ),
+              _symbolRenderer(
+                measures[m].musicalSymbolsMetricses[k],
+                layout,
+                // A rest moved off its place by the other voice.
+                staffLineCenterY: centerY - (_lifts[_at(s, m, k)] ?? 0),
+                symbolX: at.xs[s][m][k],
+                // Accidentals moved left of the other voice's head.
+                accidentalShift: _accidentalShifts[_at(s, m, k)],
+              ),
           ],
           measures[m],
           layout,
@@ -1515,6 +1584,14 @@ class _Item {
 
 /// A note's or chord's heads and when they sound, in quarter notes from the
 /// measure's start.
+/// Where two voices' heads stand side by side: [StaffSystemLayout._shifts],
+/// [StaffSystemLayout._accidentalShifts] and [StaffSystemLayout._leads].
+class _Beside {
+  final Map<int, double> shifts = {};
+  final Map<int, double> accidentals = {};
+  final Map<int, double> leads = {};
+}
+
 class _Sounding {
   const _Sounding(this.from, this.to, this.bounds);
 

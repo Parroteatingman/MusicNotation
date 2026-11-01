@@ -1020,28 +1020,32 @@ class _BracketPlace {
 MusicalSymbolRenderer recolored(MusicalSymbolRenderer symbol, Color ink) {
   if (symbol is NoteRenderer) {
     final note = symbol.note;
-    return NoteMetrics(
-      note.note.withColor(ink),
-      note.context,
-      note.metadata,
-      note.paths,
-    ).renderer(
+    return NoteRenderer(
+      NoteMetrics(
+        note.note.withColor(ink),
+        note.context,
+        note.metadata,
+        note.paths,
+      ),
       symbol.layout,
       staffLineCenterY: symbol.staffLineCenterY,
       symbolX: symbol.symbolX,
+      accidentalShift: symbol.accidentalShift,
     );
   }
   if (symbol is ChordNoteRenderer) {
     final chord = symbol.note;
-    return ChordNoteMetrics(
-      chord.note.withColor(ink),
-      chord.context,
-      chord.metadata,
-      chord.path,
-    ).renderer(
+    return ChordNoteRenderer(
+      ChordNoteMetrics(
+        chord.note.withColor(ink),
+        chord.context,
+        chord.metadata,
+        chord.path,
+      ),
       symbol.layout,
       staffLineCenterY: symbol.staffLineCenterY,
       symbolX: symbol.symbolX,
+      accidentalShift: symbol.accidentalShift,
     );
   }
   if (symbol is RestRenderer) {
