@@ -30,6 +30,8 @@ class ChordNote implements MusicalSymbol {
     this.stemDirection,
     this.isDotted = false,
     this.tuplet,
+    this.tupletStart = false,
+    this.tupletBracket = true,
     this.tie,
     this.tieDirection,
     this.isBeamed = false,
@@ -55,6 +57,15 @@ class ChordNote implements MusicalSymbol {
   /// Tuplet grouping (e.g., 3 for triplet). Null means no tuplet.
   final int? tuplet;
 
+  /// The first of a tuplet's notes and rests: a tuplet begins here even
+  /// when the one before has the same [tuplet] (two tuplets side by side
+  /// whose values fill them in fewer symbols than the number says).
+  final bool tupletStart;
+
+  /// On a tuplet's first symbol: draw its bracket. False leaves the number
+  /// alone, as where one beam holds all of the tuplet's notes.
+  final bool tupletBracket;
+
   /// Tie connection type for the chord: each of its notes is tied to the
   /// same pitch in the chord (or note) next to it.
   final TieType? tie;
@@ -72,6 +83,8 @@ class ChordNote implements MusicalSymbol {
         stemDirection: stemDirection,
         isDotted: isDotted,
         tuplet: tuplet,
+        tupletStart: tupletStart,
+        tupletBracket: tupletBracket,
         tie: tie,
         tieDirection: tieDirection,
         isBeamed: isBeamed,

@@ -21,6 +21,8 @@ class Rest implements MusicalSymbol {
     this.color = Colors.black,
     this.isDotted = false,
     this.tuplet,
+    this.tupletStart = false,
+    this.tupletBracket = true,
     this.chordLabel,
     this.chordLabelColor = Colors.black,
     this.hidden = false,
@@ -44,6 +46,15 @@ class Rest implements MusicalSymbol {
   /// Tuplet grouping (e.g., 3 for triplet). Null means no tuplet.
   final int? tuplet;
 
+  /// The first of a tuplet's notes and rests: a tuplet begins here even
+  /// when the one before has the same [tuplet] (two tuplets side by side
+  /// whose values fill them in fewer symbols than the number says).
+  final bool tupletStart;
+
+  /// On a tuplet's first symbol: draw its bracket. False leaves the number
+  /// alone, as where one beam holds all of the tuplet's notes.
+  final bool tupletBracket;
+
   /// Optional chord label displayed above the rest.
   final String? chordLabel;
 
@@ -58,6 +69,8 @@ class Rest implements MusicalSymbol {
         color: ink,
         isDotted: isDotted,
         tuplet: tuplet,
+        tupletStart: tupletStart,
+        tupletBracket: tupletBracket,
         chordLabel: chordLabel,
         chordLabelColor: chordLabelColor,
         hidden: hidden,
@@ -70,6 +83,8 @@ class Rest implements MusicalSymbol {
         color: color,
         isDotted: isDotted,
         tuplet: tuplet,
+        tupletStart: tupletStart,
+        tupletBracket: tupletBracket,
         hidden: hidden,
       );
 

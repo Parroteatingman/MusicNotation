@@ -666,6 +666,23 @@ class MeasureRenderer {
     return null;
   }
 
+  /// Whether [sr] opens a tuplet of its own (see `Note.tupletStart`).
+  bool _opensTuplet(MusicalSymbolRenderer sr) {
+    if (sr is NoteRenderer) return sr.note.note.tupletStart;
+    if (sr is ChordNoteRenderer) return sr.note.note.tupletStart;
+    if (sr is RestRenderer) return sr.restMetrics.rest.tupletStart;
+    return false;
+  }
+
+  /// Whether the tuplet [sr] opens draws its bracket (see
+  /// `Note.tupletBracket`).
+  bool _bracketed(MusicalSymbolRenderer sr) {
+    if (sr is NoteRenderer) return sr.note.note.tupletBracket;
+    if (sr is ChordNoteRenderer) return sr.note.note.tupletBracket;
+    if (sr is RestRenderer) return sr.restMetrics.rest.tupletBracket;
+    return true;
+  }
+
   /// Renders tuplet brackets (e.g., triplet "3") above/below note/rest groups.
   void _renderTupletBrackets(Canvas canvas) {
     for (final group in _tupletGroups()) {
@@ -694,7 +711,12 @@ class MeasureRenderer {
     int? currentTuplet;
 
     void flushCurrentGroup() {
-      if (currentGroup.length >= 2 && currentTuplet != null) {
+      // A tuplet marked by its first symbol is one even when its values
+      // fill it in fewer symbols than the number says (a quarter and an
+      // eighth of a triplet).
+      final marked =
+          currentGroup.isNotEmpty && _opensTuplet(currentGroup.first);
+      if ((currentGroup.length >= 2 || marked) && currentTuplet != null) {
         tupletGroups.add(List.of(currentGroup));
       }
       currentGroup.clear();
@@ -708,7 +730,8 @@ class MeasureRenderer {
         continue;
       }
 
-      if (currentGroup.isNotEmpty && t != currentTuplet) {
+      if (currentGroup.isNotEmpty &&
+          (t != currentTuplet || _opensTuplet(sr))) {
         flushCurrentGroup();
       }
 
@@ -910,6 +933,8 @@ class MeasureRenderer {
     final lastX = _getSymbolRightX(group.last);
     final centerX = (firstX + lastX) / 2;
 
+    // Under one beam the number says it alone (Gould).
+    final bracketed = _bracketed(group.first);
     final bracketPaint = Paint()
       ..color = ink
       ..strokeWidth = measureMetrics.staffLineThickness * 2
@@ -917,12 +942,14 @@ class MeasureRenderer {
 
     final hookLen = Constants.staffSpace * 0.4 * (stemUp ? 1 : -1);
 
-    // Left hook
-    canvas.drawLine(Offset(firstX, bracketY + hookLen),
-        Offset(firstX, bracketY), bracketPaint);
-    // Right hook
-    canvas.drawLine(Offset(lastX, bracketY + hookLen), Offset(lastX, bracketY),
-        bracketPaint);
+    if (bracketed) {
+      // Left hook
+      canvas.drawLine(Offset(firstX, bracketY + hookLen),
+          Offset(firstX, bracketY), bracketPaint);
+      // Right hook
+      canvas.drawLine(Offset(lastX, bracketY + hookLen),
+          Offset(lastX, bracketY), bracketPaint);
+    }
 
     // Draw number
     final textPainter = TextPainter(
@@ -945,6 +972,8 @@ class MeasureRenderer {
         canvas,
         Offset(centerX - textPainter.width / 2,
             bracketY - textPainter.height / 2));
+
+    if (!bracketed) return;
 
     // Bracket lines with gap for number
     final gapHalf = textPainter.width / 2 + Constants.staffSpace * 0.2;
