@@ -7,6 +7,7 @@ import 'package:simple_sheet_music/src/measure/measure_renderer.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_renderer.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/chord_note/chord_note.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/single_note/note.dart';
+import 'package:simple_sheet_music/src/music_objects/notes/tie_type.dart';
 
 /// The renderer for a staff, which is responsible for rendering measures and handling hit tests.
 class StaffRenderer {
@@ -172,6 +173,12 @@ class StaffRenderer {
     final start = currentMeasure.lastNoteRenderer;
     final end = nextMeasure.firstNoteRenderer;
     if (start == null || end == null) return null;
+    // Only the measure's last note or chord ties over the barline, into
+    // the next measure's first.
+    if (!identical(currentMeasure.pitchedRenderers.last, start) ||
+        !identical(nextMeasure.pitchedRenderers.first, end)) {
+      return null;
+    }
 
     final startTie = start.note.note.tie;
     final endTie = end.note.note.tie;
@@ -191,7 +198,7 @@ class StaffRenderer {
   }
 
   /// A tie from a measure's last chord to the next measure's first chord
-  /// or note.
+  /// or note, or from its last note into the next measure's first chord.
   _CrossChordTie? _buildCrossChordTie(
     MeasureRenderer currentMeasure,
     MeasureRenderer nextMeasure,
@@ -201,8 +208,14 @@ class StaffRenderer {
     if (before.isEmpty || after.isEmpty) return null;
     final start = before.last;
     final end = after.first;
-    if (start is! ChordNoteRenderer) return null;
-    final startTie = start.note.note.tie;
+    final TieType? startTie;
+    if (start is ChordNoteRenderer) {
+      startTie = start.note.note.tie;
+    } else if (start is NoteRenderer && end is ChordNoteRenderer) {
+      startTie = start.note.note.tie;
+    } else {
+      return null;
+    }
     if (startTie == null || !startTie.isStart) return null;
     final endTie = end is ChordNoteRenderer
         ? end.note.note.tie
@@ -418,7 +431,8 @@ class _CrossChordTie {
     required this.strokeWidth,
   });
 
-  final ChordNoteRenderer start;
+  /// A chord, or a note tied into a chord.
+  final MusicalSymbolRenderer start;
   final MusicalSymbolRenderer end;
   final double strokeWidth;
 }

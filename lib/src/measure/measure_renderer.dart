@@ -488,25 +488,38 @@ class MeasureRenderer {
     required bool suppressLeadingTie,
     required bool suppressTrailingTie,
   }) {
-    final noteRenderers = this.noteRenderers;
-
-    for (var i = 0; i < noteRenderers.length; i++) {
-      final current = noteRenderers[i];
+    // A note's tie goes to the note or chord right after it: to a note as
+    // it always has, to a chord only at its head of the same pitch.
+    final pitched = pitchedRenderers;
+    for (var i = 0; i < pitched.length; i++) {
+      final current = pitched[i];
+      if (current is! NoteRenderer) continue;
       final tie = current.note.note.tie;
       if (tie == null || !tie.isStart) continue;
 
-      final next = i + 1 < noteRenderers.length ? noteRenderers[i + 1] : null;
-      if (next != null) {
+      final next = i + 1 < pitched.length ? pitched[i + 1] : null;
+      if (next is NoteRenderer) {
         _drawTie(canvas, current, next);
+      } else if (next is ChordNoteRenderer) {
+        drawChordTies(
+          canvas,
+          current,
+          next,
+          strokeWidth: measureMetrics.staffLineThickness * 2,
+          endX: 0,
+        );
       } else if (!suppressTrailingTie) {
         _drawTie(canvas, current, null);
       }
     }
 
-    if (noteRenderers.isNotEmpty &&
-        noteRenderers.first.note.note.tie == TieType.stop &&
+    // A tie into the measure's first note from the barline; a note after a
+    // chord in the measure is tied from that chord, not from the barline.
+    final first = pitched.isEmpty ? null : pitched.first;
+    if (first is NoteRenderer &&
+        first.note.note.tie == TieType.stop &&
         !suppressLeadingTie) {
-      _drawLeadingTie(canvas, noteRenderers.first);
+      _drawLeadingTie(canvas, first);
     }
     _renderChordTies(
       canvas,
@@ -1098,19 +1111,22 @@ void _drawTieArc(
   );
 }
 
-/// The ties out of [start]: each of its notes to the same pitch in [end]
-/// (a chord or a note), or on to [endX] when there is none after it.
+/// The ties out of [start] (a chord, or a note tied into a chord): each of
+/// its notes to the same pitch in [end] (a chord or a note) — none where
+/// [end] has no such pitch — or on to [endX] when there is none after it.
 void drawChordTies(
   Canvas canvas,
-  ChordNoteRenderer start,
+  MusicalSymbolRenderer start,
   MusicalSymbolRenderer? end, {
   required double strokeWidth,
   required double endX,
 }) {
   const space = Constants.staffSpace;
   final heads = drawnHeads(start);
+  if (heads.isEmpty) return;
   final targets = end == null ? null : drawnHeads(end);
-  final down = _bendsDown(heads, start.note.isStemUp);
+  final down = _bendsDown(heads, _stemUpOf(start));
+  final color = _colorOf(start);
   for (var i = 0; i < heads.length; i++) {
     final head = heads[i];
     double to;
@@ -1121,9 +1137,21 @@ void drawChordTies(
       if (match.isEmpty) continue;
       to = match.first.value.left - space * 0.1;
     }
-    _drawTieArc(canvas, start.note.note.color, strokeWidth,
-        head.value.right + space * 0.1, to, head.value.center.dy, down[i]);
+    _drawTieArc(canvas, color, strokeWidth, head.value.right + space * 0.1, to,
+        head.value.center.dy, down[i]);
   }
+}
+
+bool _stemUpOf(MusicalSymbolRenderer symbol) {
+  if (symbol is NoteRenderer) return symbol.note.isStemUp;
+  if (symbol is ChordNoteRenderer) return symbol.note.isStemUp;
+  return false;
+}
+
+Color _colorOf(MusicalSymbolRenderer symbol) {
+  if (symbol is NoteRenderer) return symbol.note.note.color;
+  if (symbol is ChordNoteRenderer) return symbol.note.note.color;
+  return Colors.black;
 }
 
 /// The ties into [end] from the measure's start: a tie whose first note is
