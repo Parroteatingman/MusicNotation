@@ -141,52 +141,80 @@ class MeasureRenderer {
     }
   }
 
-  /// The runs of consecutive beamed notes, split by beamGroupId.
-  List<List<NoteRenderer>> _beamGroups() {
-    final groups = <List<NoteRenderer>>[];
-    final currentGroup = <NoteRenderer>[];
+  /// The runs of consecutive beamed notes and chords, split by beamGroupId.
+  List<List<_BeamStem>> _beamGroups() {
+    final groups = <List<_BeamStem>>[];
+    final currentGroup = <_BeamStem>[];
     int currentGroupId = -1;
 
+    void close() {
+      if (currentGroup.length >= 2) groups.add(List.of(currentGroup));
+      currentGroup.clear();
+      currentGroupId = -1;
+    }
+
     for (final symbol in symbolRenderers) {
-      if (symbol is! NoteRenderer) continue;
-      if (symbol.note.note.isBeamed) {
-        final gid = symbol.note.note.beamGroupId;
-        if (currentGroup.isNotEmpty && gid != currentGroupId) {
-          if (currentGroup.length >= 2) {
-            groups.add(List.of(currentGroup));
-          }
-          currentGroup.clear();
-        }
-        currentGroup.add(symbol);
-        currentGroupId = gid;
+      final _BeamStem? stem;
+      final int gid;
+      if (symbol is NoteRenderer) {
+        final n = symbol.note.note;
+        gid = n.beamGroupId;
+        stem = n.isBeamed
+            ? _BeamStem(
+                symbol: symbol,
+                root: symbol.note.stemRootOffset + symbol.renderOffset,
+                tip: symbol.note.stemRootOffset + symbol.renderOffset,
+                stemUp: symbol.note.isStemUp,
+                duration: n.noteDuration,
+                beat: n.beatPosition,
+                color: n.color,
+                thickness: symbol.note.stemThickness,
+              )
+            : null;
+      } else if (symbol is ChordNoteRenderer) {
+        final n = symbol.note.note;
+        gid = n.beamGroupId;
+        stem = n.isBeamed
+            ? _BeamStem(
+                symbol: symbol,
+                root: symbol.note.stemRootOffset + symbol.renderOffset,
+                tip: symbol.note.tipRootOffset + symbol.renderOffset,
+                stemUp: symbol.note.isStemUp,
+                duration: n.noteDuration,
+                beat: n.beatPosition,
+                color: n.color,
+                thickness: symbol.note.stemThickness,
+              )
+            : null;
       } else {
-        if (currentGroup.length >= 2) {
-          groups.add(List.of(currentGroup));
-        }
-        currentGroup.clear();
-        currentGroupId = -1;
+        continue;
       }
+      if (stem == null) {
+        close();
+        continue;
+      }
+      if (currentGroup.isNotEmpty && gid != currentGroupId) close();
+      currentGroup.add(stem);
+      currentGroupId = gid;
     }
-    if (currentGroup.length >= 2) {
-      groups.add(List.of(currentGroup));
-    }
+    close();
     return groups;
   }
 
   /// Where a beamed group's beam lies.
-  _BeamLine _beamLineOf(List<NoteRenderer> group) {
+  _BeamLine _beamLineOf(List<_BeamStem> group) {
     final metadata = measureMetrics.metadata;
     final staffSpace = metadata.staffSpace;
 
     // Every note of a beamed group shares one stem direction; the caller has
     // already settled it, so the first note speaks for the group.
-    final stemUp = group.first.note.isStemUp;
+    final stemUp = group.first.stemUp;
 
     // Where each stem leaves its note head. Stems are vertical, so these
     // carry the x of the whole stem as well.
-    final stemRoots = <Offset>[
-      for (final nr in group) nr.note.stemRootOffset + nr.renderOffset,
-    ];
+    final stemRoots = <Offset>[for (final s in group) s.root];
+    // The head at the far end of each stem: a chord's beam hangs from it.
+    final stemTips = <Offset>[for (final s in group) s.tip];
     final firstX = stemRoots.first.dx;
     final xSpan = stemRoots.last.dx - firstX;
 
@@ -195,7 +223,7 @@ class MeasureRenderer {
     // from tipping the beam off the staff.
     var slope = 0.0;
     if (xSpan > 0.001) {
-      final natural = (stemRoots.last.dy - stemRoots.first.dy) / xSpan;
+      final natural = (stemTips.last.dy - stemTips.first.dy) / xSpan;
       final maxSlope = staffSpace / xSpan;
       slope = natural.clamp(-maxSlope, maxSlope).toDouble();
     }
@@ -204,7 +232,7 @@ class MeasureRenderer {
     // shortest stem, so no stem in the group falls under its proper length.
     final standardStem = metadata.standardStemLength;
     var beamY = stemUp ? double.infinity : double.negativeInfinity;
-    for (final root in stemRoots) {
+    for (final root in stemTips) {
       final wanted = stemUp
           ? root.dy - standardStem - slope * (root.dx - firstX)
           : root.dy + standardStem - slope * (root.dx - firstX);
@@ -218,7 +246,7 @@ class MeasureRenderer {
     );
   }
 
-  void _drawBeamGroup(Canvas canvas, List<NoteRenderer> group) {
+  void _drawBeamGroup(Canvas canvas, List<_BeamStem> group) {
     if (group.length < 2) return;
 
     final metadata = measureMetrics.metadata;
@@ -238,8 +266,8 @@ class MeasureRenderer {
 
     // Stems run from the head to the inner edge of the beam.
     final stemPaint = Paint()
-      ..color = group.first.note.color
-      ..strokeWidth = group.first.note.stemThickness;
+      ..color = group.first.color
+      ..strokeWidth = group.first.thickness;
     for (final root in stemRoots) {
       final beamAtNote = beamYAtX(root.dx);
       final stemEndY = stemUp
@@ -249,7 +277,7 @@ class MeasureRenderer {
     }
 
     final beamPaint = Paint()
-      ..color = group.first.note.color
+      ..color = group.first.color
       ..strokeWidth = beamThickness
       ..strokeCap = StrokeCap.butt;
     canvas.drawLine(
@@ -288,7 +316,7 @@ class MeasureRenderer {
   /// boundaries, following standard music notation rules.
   void _drawPartialBeams(
     Canvas canvas,
-    List<NoteRenderer> group,
+    List<_BeamStem> group,
     List<Offset> stemTips,
     double startBeamY,
     double endBeamY,
@@ -303,13 +331,13 @@ class MeasureRenderer {
     int runStart = -1;
     for (int i = 0; i <= group.length; i++) {
       final qualifies = i < group.length &&
-          _qualifiesForBeamLevel(group[i].note.note.noteDuration, beamLevel);
+          _qualifiesForBeamLevel(group[i].duration, beamLevel);
 
       // Check if a beat boundary should break the beam at this level
       bool beatBreak = false;
       if (qualifies && runStart != -1 && i > 0 && i < group.length) {
-        final prevBeat = group[i - 1].note.note.beatPosition;
-        final currBeat = group[i].note.note.beatPosition;
+        final prevBeat = group[i - 1].beat;
+        final currBeat = group[i].beat;
         if (beamLevel == 1) {
           // Secondary beam: break at beat boundaries (integer positions)
           beatBreak = prevBeat.floor() != currBeat.floor();
@@ -357,7 +385,7 @@ class MeasureRenderer {
   /// Draws a single beam segment (full or partial stub) for a sub-run of notes.
   void _drawBeamSegment(
     Canvas canvas,
-    List<NoteRenderer> group,
+    List<_BeamStem> group,
     List<Offset> stemTips,
     double startBeamY,
     double endBeamY,
@@ -750,7 +778,7 @@ class MeasureRenderer {
       final beam = _beamLineOf(group);
       if (beam.stemUp) continue;
       for (var i = 0; i < group.length; i++) {
-        lower(group[i], beam.yAt(beam.stemRoots[i].dx) + beamThickness / 2);
+        lower(group[i].symbol, beam.yAt(beam.stemRoots[i].dx) + beamThickness / 2);
       }
     }
     for (final group in _tupletGroups()) {
@@ -791,7 +819,7 @@ class MeasureRenderer {
       final beam = _beamLineOf(group);
       if (!beam.stemUp) continue;
       for (var i = 0; i < group.length; i++) {
-        raise(group[i], beam.yAt(beam.stemRoots[i].dx) - beamThickness / 2);
+        raise(group[i].symbol, beam.yAt(beam.stemRoots[i].dx) - beamThickness / 2);
       }
     }
     for (final group in _tupletGroups()) {
@@ -906,6 +934,36 @@ class MeasureRenderer {
 
 /// Where a beamed group's beam lies: the side its stems go, where each stem
 /// leaves its head, and the line of the beam.
+/// One stem of a beamed group: a note's, or a chord's (whose beam hangs from
+/// the head at the far end of its stem while the stem starts at the head at
+/// the other).
+class _BeamStem {
+  const _BeamStem({
+    required this.symbol,
+    required this.root,
+    required this.tip,
+    required this.stemUp,
+    required this.duration,
+    required this.beat,
+    required this.color,
+    required this.thickness,
+  });
+
+  /// The note or chord it belongs to.
+  final MusicalSymbolRenderer symbol;
+
+  /// Where the stem leaves its head.
+  final Offset root;
+
+  /// Where the head nearest the beam meets the stem (the root for one note).
+  final Offset tip;
+  final bool stemUp;
+  final NoteDuration duration;
+  final double beat;
+  final Color color;
+  final double thickness;
+}
+
 class _BeamLine {
   const _BeamLine({
     required this.stemUp,

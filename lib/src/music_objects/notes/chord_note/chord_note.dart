@@ -31,7 +31,21 @@ class ChordNote implements MusicalSymbol {
     this.isDotted = false,
     this.tuplet,
     this.tie,
+    this.isBeamed = false,
+    this.beamGroupId = 0,
+    this.beatPosition = 0.0,
   });
+
+  /// Whether this chord stands in a beamed group (a beam in place of its
+  /// flag, drawn with the rest of the group by the measure).
+  final bool isBeamed;
+
+  /// Notes and chords with the same id, side by side, are beamed together.
+  final int beamGroupId;
+
+  /// Where the chord falls in its bar, in beats: the secondary beams of a
+  /// group break at the beat.
+  final double beatPosition;
 
   /// Whether the chord has a dot (extends duration by 50%): one beside
   /// every head.
@@ -54,6 +68,9 @@ class ChordNote implements MusicalSymbol {
         isDotted: isDotted,
         tuplet: tuplet,
         tie: tie,
+        isBeamed: isBeamed,
+        beamGroupId: beamGroupId,
+        beatPosition: beatPosition,
       );
 
   @override
@@ -388,6 +405,10 @@ class ChordNoteMetrics implements MusicalSymbolMetrics {
   Offset get _tipNoteRootOffset =>
       _isStemUp ? _uppestNoteStemRootOffset : _lowestNoteStemRootOffset;
 
+  /// Where the head at the stem's far end meets the stem: a beam over the
+  /// chord is hung a stem's length from here.
+  Offset get tipRootOffset => _tipNoteRootOffset;
+
   /// Calculates the offset of the stem root for a specific [ChordNoteHeadMetrics].
   Offset _noteStemRootOffset(ChordNoteHeadMetrics noteHead) =>
       Offset(_noteHeadInitialX, 0) +
@@ -640,7 +661,7 @@ class ChordNoteRenderer implements MusicalSymbolRenderer {
   }
 
   void _renderStem(Canvas canvas) {
-    if (!note.hasStem) {
+    if (!note.hasStem || note.note.isBeamed) {
       return;
     }
     canvas.drawLine(
@@ -653,7 +674,7 @@ class ChordNoteRenderer implements MusicalSymbolRenderer {
   }
 
   void _renderFlag(Canvas canvas) {
-    if (!note.hasFlag) {
+    if (!note.hasFlag || note.note.isBeamed) {
       return;
     }
     canvas.drawPath(

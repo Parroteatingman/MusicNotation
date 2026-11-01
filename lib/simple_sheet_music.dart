@@ -25,7 +25,7 @@ export 'src/music_objects/notes/chord_note/chord_note_part.dart'
 export 'src/music_objects/notes/note_duration.dart' show NoteDuration;
 export 'src/music_objects/notes/note_pitch.dart' show Pitch;
 export 'src/music_objects/notes/single_note/note.dart' show Note;
-// export 'src/music_objects/notes/stem_direction.dart' show StemDirection;
+export 'src/music_objects/notes/stem_direction.dart' show StemDirection;
 export 'src/music_objects/interface/musical_symbol.dart' show MusicalSymbol;
 export 'src/music_objects/rest/rest.dart' show Rest;
 export 'src/music_objects/time_signature/time_signature.dart'
