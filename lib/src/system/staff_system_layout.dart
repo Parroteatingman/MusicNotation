@@ -738,7 +738,8 @@ class StaffSystemLayout {
   /// How far right a note or chord of a staff with a voice stands of its
   /// moment, by staff, measure and symbol, in canvas units: where the two
   /// voices strike at once a second apart (or in unison), the one with its
-  /// stem up stands right of the other, the heads side by side (Gould).
+  /// stem up stands right of the other, the heads side by side (Gould) — its
+  /// accidentals, which are drawn with it, between the two heads.
   late final Map<int, double> _shifts = _findShifts();
 
   Map<int, double> _findShifts() {
@@ -763,11 +764,12 @@ class StaffSystemLayout {
           final touch = lows.any((p) => highs.any((q) => (p - q).abs() <= 1));
           if (!touch) continue;
           // The stem-up one moves; the voice's when neither or both stand up.
+          // Its accidentals move with it, clear of the other's head.
           final baseMoves = _stemUp(high) && !_stemUp(low);
           if (baseMoves) {
-            out[_at(b, m, at)] = _headWidth(low);
+            out[_at(b, m, at)] = _headWidth(low) + _besideHead(high);
           } else {
-            out[_at(v, m, item.index)] = _headWidth(high);
+            out[_at(v, m, item.index)] = _headWidth(high) + _besideHead(low);
           }
         }
       }
@@ -788,6 +790,11 @@ class StaffSystemLayout {
     }
     return const [];
   }
+
+  /// How much further right a note moved beside another must go so its
+  /// accidentals stand clear of that note's head: their width and a gap.
+  static double _besideHead(MusicalSymbolMetrics symbol) =>
+      symbol.leadingWidth > 0 ? symbol.leadingWidth + _space * 0.2 : 0;
 
   static bool _stemUp(MusicalSymbolMetrics symbol) {
     if (symbol is NoteMetrics) return symbol.isStemUp;
