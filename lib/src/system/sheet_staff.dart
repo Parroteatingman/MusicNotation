@@ -16,17 +16,51 @@ import 'package:simple_sheet_music/src/sheet_symbol_box.dart';
 /// still read in the bass clef).
 ///
 /// One voice to a staff: notes, chords (`ChordNote`) and rests one after
-/// another. A second voice on the same staff is not drawn yet.
+/// another. A second voice on a staff is a staff of its own with [voiceOf]
+/// set: it is drawn on that staff's lines, its notes lined up beat by beat
+/// with every other staff's.
 class SheetStaff {
   const SheetStaff(
     this.measures, {
     this.clef = ClefType.treble,
     this.keySignature = KeySignatureType.cMajor,
+    this.voiceOf,
   });
+
+  /// A second voice on staff [staff]'s lines (with that staff's [clef] and
+  /// [keySignature]): its notes, chords and rests, as many measures as every
+  /// staff holds.
+  const SheetStaff.voice(
+    this.measures, {
+    required int staff,
+    this.clef = ClefType.treble,
+    this.keySignature = KeySignatureType.cMajor,
+  }) : voiceOf = staff;
 
   final List<Measure> measures;
   final ClefType clef;
   final KeySignatureType keySignature;
+
+  /// The staff (counted from 0 at the top) whose lines this voice is drawn
+  /// on; null for a staff of its own.
+  ///
+  /// A voice draws no staff lines, barlines, clef or key of its own — its
+  /// measures hold only notes, chords and rests — and takes no room down the
+  /// page: its notes reach above and below its staff as that staff's own do.
+  /// It is the lower of the two voices: where both voices have notes at
+  /// once and their heads would touch, the one with its stem up stands to
+  /// the right; in a measure where the other voice has notes, a rest of the
+  /// staff stands higher and a rest of the voice lower. A voice's rests are
+  /// usually not printed (`Rest.hidden`): such a rest keeps its time and
+  /// asks for no room.
+  ///
+  /// Voices come after every staff of their own in a system's list, so the
+  /// staffs keep their numbers ([StaffGroup], `labelStaff`). The system's
+  /// geometry gives a voice's notes this voice's number as their staff, and
+  /// no box of its own among the staffs.
+  final int? voiceOf;
+
+  bool get isVoice => voiceOf != null;
 }
 
 /// How a [StaffGroup] is marked at the start of the system.
@@ -116,6 +150,9 @@ class SheetSystemGeometry {
   /// The system's opening line, where every staff starts; a brace or a
   /// bracket stands left of it.
   final double contentLeft;
+
+  /// The staffs drawn, top down: a second voice ([SheetStaff.voiceOf]) is
+  /// drawn on its staff's lines and has no box of its own.
   final List<SheetStaffBox> staffs;
 
   /// Where each measure starts and ends across the system.
@@ -123,7 +160,8 @@ class SheetSystemGeometry {
   final List<double> measureRights;
 
   /// Every note, rest and chord of the system, staff by staff: a box's
-  /// [SheetSymbolBox.staff] is its staff and [SheetSymbolBox.order] its
+  /// [SheetSymbolBox.staff] is its staff (a voice's own number, for a
+  /// second voice: see [SheetStaff.voiceOf]) and [SheetSymbolBox.order] its
   /// place among that staff's notes, rests and chords.
   final List<SheetSymbolBox> symbols;
 

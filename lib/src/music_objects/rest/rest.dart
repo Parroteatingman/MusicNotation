@@ -23,10 +23,15 @@ class Rest implements MusicalSymbol {
     this.tuplet,
     this.chordLabel,
     this.chordLabelColor = Colors.black,
+    this.hidden = false,
   });
 
   @override
   final Color color;
+
+  /// Keeps its time but draws nothing and asks for no room of its own: the
+  /// rest of a voice that is not printed (a second voice's, mostly).
+  final bool hidden;
 
   @override
   final EdgeInsets margin;
@@ -55,6 +60,7 @@ class Rest implements MusicalSymbol {
         tuplet: tuplet,
         chordLabel: chordLabel,
         chordLabelColor: chordLabelColor,
+        hidden: hidden,
       );
 
   /// The same rest without a chord name over it.
@@ -64,6 +70,7 @@ class Rest implements MusicalSymbol {
         color: color,
         isDotted: isDotted,
         tuplet: tuplet,
+        hidden: hidden,
       );
 
   @override
@@ -174,6 +181,7 @@ class RestRenderer implements MusicalSymbolRenderer {
 
   @override
   void render(Canvas canvas) {
+    if (restMetrics.rest.hidden) return;
     _renderChordLabel(canvas);
     canvas.drawPath(renderPath, Paint()..color = restMetrics.rest.color);
     _renderDot(canvas);

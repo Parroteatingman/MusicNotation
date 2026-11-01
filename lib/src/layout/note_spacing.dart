@@ -2,6 +2,12 @@ import 'dart:math';
 
 import 'package:simple_sheet_music/src/constants.dart';
 import 'package:simple_sheet_music/src/music_objects/interface/musical_symbol_metrics.dart';
+import 'package:simple_sheet_music/src/music_objects/rest/rest.dart';
+
+/// A symbol that keeps its time but is not drawn (a hidden rest): it takes
+/// no part in the spacing.
+bool isUnprinted(MusicalSymbolMetrics symbol) =>
+    symbol is RestMetrics && symbol.rest.hidden;
 
 /// Horizontal spacing by note value, the way engravers set music.
 ///
@@ -75,6 +81,7 @@ class SpacingReference {
   factory SpacingReference.of(Iterable<MusicalSymbolMetrics> symbols) {
     var shortest = double.infinity;
     for (final symbol in symbols) {
+      if (isUnprinted(symbol)) continue;
       final units = symbol.durationUnits;
       if (units > 0 && units < shortest) shortest = units;
     }
@@ -82,6 +89,7 @@ class SpacingReference {
 
     var width = 0.0;
     for (final symbol in symbols) {
+      if (isUnprinted(symbol)) continue;
       if (symbol.durationUnits != shortest) continue;
       final bare = symbol.width - symbol.leadingWidth;
       if (bare > width) width = bare;

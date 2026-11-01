@@ -17,6 +17,7 @@ import 'package:simple_sheet_music/src/music_objects/key_signature/key_signature
 import 'package:simple_sheet_music/src/music_objects/notes/chord_note/chord_note.dart';
 import 'package:simple_sheet_music/src/music_objects/notes/single_note/note.dart';
 import 'package:simple_sheet_music/src/music_objects/rest/rest.dart';
+import 'package:simple_sheet_music/src/music_objects/rest/rest_type.dart';
 import 'package:simple_sheet_music/src/music_objects/time_signature/time_signature.dart';
 import 'package:simple_sheet_music/src/sheet_music_layout.dart';
 import 'package:simple_sheet_music/src/sheet_music_metrics.dart';
@@ -40,6 +41,9 @@ typedef SheetSymbolColor = Color? Function(int staff, int index);
 /// in the system); then every staff's notes are fitted around them, each
 /// note keeping at least the room it would have on a staff of its own. A
 /// single staff set this way lands where [SheetMusicLayout] puts it.
+///
+/// A second voice ([SheetStaff.voiceOf]) is lined up as a staff is, and
+/// drawn on its staff's lines.
 ///
 /// Everything is in canvas units (a staff space is 250) at [canvasScale];
 /// widths and paddings handed in are in points.
@@ -78,6 +82,20 @@ class StaffSystemLayout {
         'Every staff of a system holds the same measures',
       );
     }
+    final drawn = staffs.indexWhere((staff) => staff.isVoice);
+    final own = drawn < 0 ? staffs.length : drawn;
+    for (var i = 0; i < staffs.length; i++) {
+      final of = staffs[i].voiceOf;
+      final fine = i < own ? of == null : (of != null && of >= 0 && of < own);
+      if (!fine) {
+        throw ArgumentError.value(
+          [for (final staff in staffs) staff.voiceOf],
+          'staffs',
+          'A voice comes after the staffs, on one of them',
+        );
+      }
+    }
+    drawnStaffCount = own;
   }
 
   final List<SheetStaff> _sources;
@@ -147,8 +165,27 @@ class StaffSystemLayout {
   /// its width is pulled together (as on a single staff).
   static const double minMarginScale = SheetMusicLayout.minMarginScale;
 
+  /// Every staff handed in, the voices ([SheetStaff.voiceOf]) included.
   int get staffCount => _sources.length;
+
+  /// The staffs drawn with lines of their own: the first ones handed in,
+  /// before any voice.
+  late final int drawnStaffCount;
+
   int get measureCount => _sources.first.measures.length;
+
+  /// The staff whose lines staff [s] is drawn on: its own, or the one it is
+  /// a voice of.
+  int lineOf(int s) => _sources[s].voiceOf ?? s;
+
+  bool _isVoice(int s) => s >= drawnStaffCount;
+
+  /// The voices drawn on staff [s]'s lines.
+  Iterable<int> _voicesOf(int s) sync* {
+    for (var v = drawnStaffCount; v < staffCount; v++) {
+      if (_sources[v].voiceOf == s) yield v;
+    }
+  }
 
   // ---------------------------------------------------------------------
   // The staffs as metrics.
@@ -157,7 +194,7 @@ class StaffSystemLayout {
 
   List<_Staff> _buildStaffs() {
     List<Measure> prepared(int index) {
-      final carries = labelStaff == index;
+      final carries = labelStaff == index && !_isVoice(index);
       return [
         for (final measure in _sources[index].measures)
           carries ? measure.withNewLine(false) : _withoutLabels(measure),
@@ -480,8 +517,9 @@ class StaffSystemLayout {
       // so the key signatures line up; one after another otherwise.
       final slots = <int, List<double>>{};
       double prefixEnd;
+      final drawn = drawnStaffCount;
       final kinds = [
-        for (var s = 0; s < staffCount; s++)
+        for (var s = 0; s < drawn; s++)
           [
             for (var k = 0; k < columns[s].prefix; k++)
               _kindOf(metricsOf(s).musicalSymbolsMetricses[k]),
@@ -490,13 +528,13 @@ class StaffSystemLayout {
       final aligned = kinds.every((k) => _sameKinds(k, kinds.first));
       if (aligned) {
         final widths = List<double>.filled(kinds.first.length, 0);
-        for (var s = 0; s < staffCount; s++) {
+        for (var s = 0; s < drawn; s++) {
           final symbols = metricsOf(s).musicalSymbolsMetricses;
           for (var k = 0; k < columns[s].prefix; k++) {
             widths[k] = max(widths[k], whole(s, symbols[k]));
           }
         }
-        for (var s = 0; s < staffCount; s++) {
+        for (var s = 0; s < drawn; s++) {
           var x = x0;
           final at = <double>[];
           for (var k = 0; k < columns[s].prefix; k++) {
@@ -512,7 +550,7 @@ class StaffSystemLayout {
         prefixEnd = end;
       } else {
         prefixEnd = x0;
-        for (var s = 0; s < staffCount; s++) {
+        for (var s = 0; s < drawn; s++) {
           final symbols = metricsOf(s).musicalSymbolsMetricses;
           var x = x0;
           final at = <double>[];
@@ -524,15 +562,37 @@ class StaffSystemLayout {
           prefixEnd = max(prefixEnd, x);
         }
       }
+      // A voice opens with nothing, as a rule; what it does open with is set
+      // one after another.
+      for (var s = drawn; s < staffCount; s++) {
+        final symbols = metricsOf(s).musicalSymbolsMetricses;
+        var x = x0;
+        final at = <double>[];
+        for (var k = 0; k < columns[s].prefix; k++) {
+          at.add(x);
+          x += whole(s, symbols[k]);
+        }
+        slots[s] = at;
+        prefixEnd = max(prefixEnd, x);
+      }
 
-      // The moments anything starts, on any staff.
+      // The moments anything printed starts, on any staff. A rest that is
+      // not printed asks for no moment and no room of its own.
+      final printed = [
+        for (var s = 0; s < staffCount; s++)
+          [
+            for (final item in columns[s].items)
+              if (!isUnprinted(metricsOf(s).musicalSymbolsMetricses[item.index]))
+                item,
+          ],
+      ];
       final onsetKeys = <int>{};
       var end = 0.0;
-      for (final c in columns) {
-        for (final item in c.items) {
+      for (var s = 0; s < staffCount; s++) {
+        for (final item in printed[s]) {
           onsetKeys.add(_key(item.onset));
         }
-        end = max(end, c.total);
+        end = max(end, columns[s].total);
       }
       final onsets = onsetKeys.toList()..sort();
       final columnOf = {
@@ -555,22 +615,24 @@ class StaffSystemLayout {
       }
 
       for (var s = 0; s < staffCount; s++) {
-        final c = columns[s];
+        final items = printed[s];
         final symbols = metricsOf(s).musicalSymbolsMetricses;
-        for (var k = 0; k < c.items.length; k++) {
-          final item = c.items[k];
+        for (var k = 0; k < items.length; k++) {
+          final item = items[k];
           final symbol = symbols[item.index];
           final from = columnOf[_key(item.onset)]!;
+          final shift = _shifts[_at(s, m, item.index)];
           var room = advance(s, symbol) - symbol.leadingWidth + right(symbol);
+          if (shift != null) room += shift;
           for (final a in item.attached) {
             room += whole(s, symbols[a]);
           }
           if (k == 0) {
             need(0, from, left(symbol) + symbol.leadingWidth);
           }
-          if (k + 1 < c.items.length) {
-            final next = symbols[c.items[k + 1].index];
-            final to = columnOf[_key(c.items[k + 1].onset)]!;
+          if (k + 1 < items.length) {
+            final next = symbols[items[k + 1].index];
+            final to = columnOf[_key(items[k + 1].onset)]!;
             need(from, to, room + left(next) + next.leadingWidth);
           } else {
             need(from, endColumn, room);
@@ -611,6 +673,25 @@ class StaffSystemLayout {
         anchors[i + 1] = anchors[i] + gaps[i];
       }
 
+      // Where a moment stands across the line: its column, or — a rest not
+      // printed, at a moment nothing printed starts — between the columns
+      // around it, by time.
+      double headAt(double onset) {
+        final column = columnOf[_key(onset)];
+        if (column != null) return anchors[column];
+        var before = 0;
+        var from = 0.0;
+        for (var i = 0; i < onsets.length; i++) {
+          if (times[i] > onset) break;
+          before = i + 1;
+          from = times[i];
+        }
+        final to = times[before];
+        if (to <= from) return anchors[before];
+        return anchors[before] +
+            (anchors[before + 1] - anchors[before]) * (onset - from) / (to - from);
+      }
+
       // Every symbol where the renderer wants it: the x it is handed, with
       // what a cut margin took off its left (see MeasureMetrics).
       for (var s = 0; s < staffCount; s++) {
@@ -623,8 +704,10 @@ class StaffSystemLayout {
         }
         for (final item in c.items) {
           final symbol = symbols[item.index];
-          final head = anchors[columnOf[_key(item.onset)]!];
+          final head = headAt(item.onset);
           var x = head - left(symbol) - symbol.leadingWidth;
+          final shift = _shifts[_at(s, m, item.index)];
+          if (shift != null) x += shift;
           at[item.index] = x;
           x += whole(s, symbol);
           for (final a in item.attached) {
@@ -647,6 +730,167 @@ class StaffSystemLayout {
       squeeze: squeeze,
       marginScale: marginScale,
     );
+  }
+
+  // ---------------------------------------------------------------------
+  // Two voices on one staff.
+
+  /// How far right a note or chord of a staff with a voice stands of its
+  /// moment, by staff, measure and symbol, in canvas units: where the two
+  /// voices strike at once a second apart (or in unison), the one with its
+  /// stem up stands right of the other, the heads side by side (Gould).
+  late final Map<int, double> _shifts = _findShifts();
+
+  Map<int, double> _findShifts() {
+    final out = <int, double>{};
+    for (var v = drawnStaffCount; v < staffCount; v++) {
+      final b = lineOf(v);
+      for (var m = 0; m < measureCount; m++) {
+        final base = _staffs[b].measures[m].musicalSymbolsMetricses;
+        final voice = _staffs[v].measures[m].musicalSymbolsMetricses;
+        final struck = <int, int>{
+          for (final item in _Column.of(_staffs[b].measures[m]).items)
+            if (_headsOf(base[item.index]).isNotEmpty) _key(item.onset): item.index,
+        };
+        for (final item in _Column.of(_staffs[v].measures[m]).items) {
+          final low = voice[item.index];
+          final at = struck[_key(item.onset)];
+          if (at == null) continue;
+          final high = base[at];
+          final lows = _headsOf(low);
+          final highs = _headsOf(high);
+          if (lows.isEmpty) continue;
+          final touch = lows.any((p) => highs.any((q) => (p - q).abs() <= 1));
+          if (!touch) continue;
+          // The stem-up one moves; the voice's when neither or both stand up.
+          final baseMoves = _stemUp(high) && !_stemUp(low);
+          if (baseMoves) {
+            out[_at(b, m, at)] = _headWidth(low);
+          } else {
+            out[_at(v, m, item.index)] = _headWidth(high);
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  /// The key of a symbol [k] of measure [m] of staff [s] in [_shifts] and
+  /// [_lifts].
+  static int _at(int s, int m, int k) => (s * 4096 + m) * 4096 + k;
+
+  /// The staff positions of a note's or chord's heads; none for anything
+  /// else.
+  static List<int> _headsOf(MusicalSymbolMetrics symbol) {
+    if (symbol is NoteMetrics) return [symbol.pitch.position];
+    if (symbol is ChordNoteMetrics) {
+      return [for (final head in symbol.noteHeads) head.pitch.position];
+    }
+    return const [];
+  }
+
+  static bool _stemUp(MusicalSymbolMetrics symbol) {
+    if (symbol is NoteMetrics) return symbol.isStemUp;
+    if (symbol is ChordNoteMetrics) return symbol.isStemUp;
+    return false;
+  }
+
+  static double _headWidth(MusicalSymbolMetrics symbol) {
+    if (symbol is NoteMetrics) return symbol.noteHeadWidth;
+    if (symbol is ChordNoteMetrics && symbol.noteHeads.isNotEmpty) {
+      var widest = 0.0;
+      for (final head in symbol.noteHeads) {
+        widest = max(widest, head.noteHeadRect.width);
+      }
+      return widest;
+    }
+    return 0;
+  }
+
+  /// How far a printed rest of a staff with a voice is moved up (or, a
+  /// voice's rest, down) from its usual place, by staff, measure and symbol,
+  /// in canvas units: in a measure where the other voice has notes, an
+  /// upper voice's rests stand higher — a whole rest from the top line, the
+  /// others two spaces up — and a lower voice's two spaces lower, each then
+  /// a space at a time further until clear of the other voice's heads
+  /// sounding with it.
+  late final Map<int, double> _lifts = _findLifts();
+
+  Map<int, double> _findLifts() {
+    final out = <int, double>{};
+    void move(int s, int m, List<int> others, {required bool up}) {
+      final symbols = _staffs[s].measures[m].musicalSymbolsMetricses;
+      final rests = [
+        for (final item in _Column.of(_staffs[s].measures[m]).items)
+          if (symbols[item.index] is RestMetrics &&
+              !isUnprinted(symbols[item.index]))
+            item,
+      ];
+      if (rests.isEmpty) return;
+      // The other voice's heads, at a staff's middle line of 0, with when
+      // they sound.
+      final heads = <_Sounding>[];
+      for (final o in others) {
+        final theirs = _staffs[o].measures[m].musicalSymbolsMetricses;
+        for (final item in _Column.of(_staffs[o].measures[m]).items) {
+          final symbol = theirs[item.index];
+          final Rect bounds;
+          if (symbol is NoteMetrics) {
+            bounds = (symbol.renderer(_layouts[o],
+                    staffLineCenterY: 0, symbolX: 0) as NoteRenderer)
+                .noteHeadBounds;
+          } else if (symbol is ChordNoteMetrics) {
+            bounds = (symbol.renderer(_layouts[o],
+                    staffLineCenterY: 0, symbolX: 0) as ChordNoteRenderer)
+                .noteHeadsRenderBounds;
+          } else {
+            continue;
+          }
+          heads.add(
+              _Sounding(item.onset, item.onset + symbol.durationUnits, bounds));
+        }
+      }
+      if (heads.isEmpty) return;
+      const clear = _space * 0.3;
+      for (final item in rests) {
+        final rest = symbols[item.index] as RestMetrics;
+        final from = item.onset;
+        final to = from + rest.durationUnits;
+        final box = rest.bbox;
+        var reach = up ? double.infinity : double.negativeInfinity;
+        for (final head in heads) {
+          if (head.from >= to - 1e-9 || head.to <= from + 1e-9) continue;
+          reach = up
+              ? min(reach, head.bounds.top)
+              : max(reach, head.bounds.bottom);
+        }
+        var by = up && rest.restType == RestType.whole ? _space : _space * 2;
+        while (by < _space * 5 &&
+            (up ? box.bottom - by > reach - clear : box.top + by < reach + clear)) {
+          by += _space;
+        }
+        out[_at(s, m, item.index)] = up ? by : -by;
+      }
+    }
+
+    for (var b = 0; b < drawnStaffCount; b++) {
+      final voices = _voicesOf(b).toList();
+      if (voices.isEmpty) continue;
+      for (var m = 0; m < measureCount; m++) {
+        bool plays(int s) => _staffs[s]
+            .measures[m]
+            .musicalSymbolsMetricses
+            .any((symbol) => _headsOf(symbol).isNotEmpty);
+        final voicesPlay = voices.where(plays).toList();
+        if (voicesPlay.isNotEmpty) move(b, m, voicesPlay, up: true);
+        if (plays(b)) {
+          for (final v in voices) {
+            move(v, m, [b], up: false);
+          }
+        }
+      }
+    }
+    return out;
   }
 
   static bool _sameKinds(List<Object> a, List<Object> b) {
@@ -682,25 +926,31 @@ class StaffSystemLayout {
     // tuplet brackets reach where the notes stand, and a system drawn wider
     // moves them by no more than the clearance.
     final natural = _place(contentStart: 0);
-    for (var s = 0; s < staffCount; s++) {
+    final drawn = drawnStaffCount;
+    for (var s = 0; s < drawn; s++) {
       final staff = _staffs[s];
       var upper = staff.staffMetrics.upperHeight;
       var lower = staff.staffMetrics.lowerHeight;
-      final measures = _measureRenderers(s, natural, 0);
+      final voices = _voicesOf(s).toList();
       var top = 0.0;
       var bottom = 0.0;
-      for (final measure in measures) {
-        for (final y in measure.symbolInkTops()) {
-          if (y.isFinite && y < top) top = y;
-        }
-        for (final y in measure.symbolInkBottoms()) {
-          if (y.isFinite && y > bottom) bottom = y;
+      // A staff's voices reach above and below it as its own notes do.
+      for (final t in [s, ...voices]) {
+        for (final measure in _measureRenderers(t, natural, 0)) {
+          for (final y in measure.symbolInkTops()) {
+            if (y.isFinite && y < top) top = y;
+          }
+          for (final y in measure.symbolInkBottoms()) {
+            if (y.isFinite && y > bottom) bottom = y;
+          }
         }
       }
       // Only a side that faces another staff reads the ink: the outside of
-      // the system is held as a single staff holds it.
-      if (s > 0) upper = max(upper, -top);
-      if (s < staffCount - 1) lower = max(lower, bottom);
+      // the system is held as a single staff holds it (and as far as a
+      // second voice reaches).
+      final voiced = voices.isNotEmpty;
+      if (s > 0 || voiced) upper = max(upper, -top);
+      if (s < drawn - 1 || voiced) lower = max(lower, bottom);
       uppers.add(upper);
       lowers.add(lower);
     }
@@ -716,7 +966,7 @@ class StaffSystemLayout {
 
     final pad = verticalPadding / canvasScale;
     final centers = <double>[pad + uppers.first];
-    for (var s = 1; s < staffCount; s++) {
+    for (var s = 1; s < drawn; s++) {
       final together = groups.any((g) =>
           g.kind != StaffGroupKind.bracket && g.contains(s - 1) && g.contains(s));
       final gap = (together ? grandStaffGap : partGap) * _space;
@@ -742,6 +992,10 @@ class StaffSystemLayout {
           centers[s] += shift;
         }
       }
+    }
+    // A voice stands on its staff's lines.
+    for (var v = drawn; v < staffCount; v++) {
+      centers.add(centers[lineOf(v)]);
     }
     return centers;
   }
@@ -828,7 +1082,8 @@ class StaffSystemLayout {
             for (var k = 0; k < measures[m].musicalSymbolsMetricses.length; k++)
               measures[m].musicalSymbolsMetricses[k].renderer(
                     layout,
-                    staffLineCenterY: centerY,
+                    // A rest moved off its place by the other voice.
+                    staffLineCenterY: centerY - (_lifts[_at(s, m, k)] ?? 0),
                     symbolX: at.xs[s][m][k],
                   ),
           ],
@@ -859,13 +1114,15 @@ class StaffSystemLayout {
         _measureRenderers(s, _placement, staffCenters[s]),
         // A staff on its own draws its barlines itself, as a single staff
         // does; across a run of staffs they are drawn once, through all.
-        showBarlines: showBarlines && _alone(s),
+        showBarlines: showBarlines && !_isVoice(s) && _alone(s),
         showEndBarline: showEndBarline && !showFinalBarline,
         showFinalBarline: showFinalBarline,
         staffExtendWidth: extendStaffToFullWidth ? _lineEnd : null,
         staffLinesFrom: _contentStart,
-        paths: s == labelStaff ? paths : null,
+        paths: s == labelStaff && !_isVoice(s) ? paths : null,
         chordLift: _staffs[s].staffMetrics.chordLift,
+        // A voice is drawn on its staff's lines.
+        drawsStaff: !_isVoice(s),
       ),
   ];
 
@@ -897,12 +1154,13 @@ class StaffSystemLayout {
 
   List<_Run> _buildRuns() {
     final runs = <_Run>[];
+    final drawn = drawnStaffCount;
     var s = 0;
-    while (s < staffCount) {
+    while (s < drawn) {
       var last = s;
       for (final group in groups) {
         if (group.barlinesThrough && group.first == s) {
-          last = max(last, min(group.last, staffCount - 1));
+          last = max(last, min(group.last, drawn - 1));
         }
       }
       runs.add(_Run(s, last));
@@ -1012,11 +1270,11 @@ class StaffSystemLayout {
   /// The opening line joining every staff, and the braces and brackets
   /// left of it.
   void _renderOpening(Canvas canvas) {
-    if (staffCount < 2) return;
+    if (drawnStaffCount < 2) return;
     final x = _contentStart;
     final thin = _thickness * 1.5;
     canvas.drawRect(
-      Rect.fromLTRB(x, _top(0), x + thin, _bottom(staffCount - 1)),
+      Rect.fromLTRB(x, _top(0), x + thin, _bottom(drawnStaffCount - 1)),
       Paint()..color = inkColor,
     );
     final hasBracket = groups.any((g) => g.kind == StaffGroupKind.bracket);
@@ -1087,13 +1345,16 @@ class StaffSystemLayout {
       final center = staffCenters[s];
       final staffTop = (center - _space * 2) * scale;
       final staffBottom = (center + _space * 2) * scale;
-      staffBoxes.add(SheetStaffBox(
-        staff: s,
-        top: staffTop,
-        bottom: staffBottom,
-        inkTop: (center - max(_uppers[s], _space * 2)) * scale,
-        inkBottom: (center + max(_lowers[s], _space * 2)) * scale,
-      ));
+      // A voice has its staff's box.
+      if (!_isVoice(s)) {
+        staffBoxes.add(SheetStaffBox(
+          staff: s,
+          top: staffTop,
+          bottom: staffBottom,
+          inkTop: (center - max(_uppers[s], _space * 2)) * scale,
+          inkBottom: (center + max(_lowers[s], _space * 2)) * scale,
+        ));
+      }
       var order = 0;
       final measures = staffRenderers[s].measureRendereres;
       for (var m = 0; m < measures.length; m++) {
@@ -1243,6 +1504,16 @@ class _Item {
   final int index;
   final double onset;
   final List<int> attached = [];
+}
+
+/// A note's or chord's heads and when they sound, in quarter notes from the
+/// measure's start.
+class _Sounding {
+  const _Sounding(this.from, this.to, this.bounds);
+
+  final double from;
+  final double to;
+  final Rect bounds;
 }
 
 /// Staffs [first] to [last], a barline drawn through them.

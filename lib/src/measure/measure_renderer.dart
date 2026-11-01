@@ -730,7 +730,7 @@ class MeasureRenderer {
         } else if (sr is ChordNoteRenderer) {
           final tipY = chordEnd(sr, up: true);
           if (tipY < minY) minY = tipY;
-        } else if (sr is RestRenderer) {
+        } else if (sr is RestRenderer && !sr.restMetrics.rest.hidden) {
           final topY = sr.renderArea.top;
           if (topY < minY) minY = topY;
         }
@@ -745,7 +745,7 @@ class MeasureRenderer {
       } else if (sr is ChordNoteRenderer) {
         final tipY = chordEnd(sr, up: false);
         if (tipY > maxY) maxY = tipY;
-      } else if (sr is RestRenderer) {
+      } else if (sr is RestRenderer && !sr.restMetrics.rest.hidden) {
         final botY = sr.renderArea.bottom;
         if (botY > maxY) maxY = botY;
       }
@@ -763,7 +763,7 @@ class MeasureRenderer {
           symbol.staffLineCenterY + symbol.note.lowerHeight
         else if (symbol is ChordNoteRenderer)
           symbol.staffLineCenterY + symbol.note.lowerHeight
-        else if (symbol is RestRenderer)
+        else if (symbol is RestRenderer && !symbol.restMetrics.rest.hidden)
           symbol.renderArea.bottom
         else
           double.negativeInfinity,
@@ -804,7 +804,7 @@ class MeasureRenderer {
           symbol.staffLineCenterY + symbol.note.bbox.top
         else if (symbol is ChordNoteRenderer)
           symbol.staffLineCenterY - symbol.note.upperHeight
-        else if (symbol is RestRenderer)
+        else if (symbol is RestRenderer && !symbol.restMetrics.rest.hidden)
           symbol.renderArea.top
         else
           double.infinity,
@@ -860,6 +860,10 @@ class MeasureRenderer {
 
   void _drawTupletBracket(Canvas canvas, List<MusicalSymbolRenderer> group) {
     if (group.isEmpty) return;
+    // A tuplet of rests that are not printed has no bracket either.
+    if (group.every((sr) => sr is RestRenderer && sr.restMetrics.rest.hidden)) {
+      return;
+    }
     final tupletNumber = _getTuplet(group.first) ?? 3;
 
     // The bracket and its number take the first note's colour, as its beam

@@ -248,6 +248,7 @@ class _SimpleSheetSystemState extends State<SimpleSheetSystem> {
           Object.hash(
             staff.clef,
             staff.keySignature,
+            staff.voiceOf,
             Object.hashAll([
               for (final measure in staff.measures)
                 Object.hash(
@@ -352,7 +353,8 @@ class _SimpleSheetSystemState extends State<SimpleSheetSystem> {
               key: const ValueKey('simple-sheet-music-loading'),
               width: widget.width,
               height: widget.height ??
-                  widget.staffSpace * (10 * widget.staffs.length),
+                  widget.staffSpace *
+                      (10 * widget.staffs.where((s) => !s.isVoice).length),
             );
           }
           return _drawn(ready);

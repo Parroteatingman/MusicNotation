@@ -21,7 +21,12 @@ class StaffRenderer {
     this.paths,
     this.chordLift = 0,
     this.staffLinesFrom = 0,
+    this.drawsStaff = true,
   });
+
+  /// Draw the staff itself — its lines and barlines — under the measures'
+  /// notes. Off for a second voice drawn on another staff's lines.
+  final bool drawsStaff;
 
   /// Where the staff lines start when they are drawn across to
   /// [staffExtendWidth]: the page's left edge, or — on a staff of a system
@@ -122,7 +127,7 @@ class StaffRenderer {
     // If staffExtendWidth is set, extend staff lines beyond content
     final extendsStaffLines =
         staffExtendWidth != null && measureRendereres.isNotEmpty;
-    if (extendsStaffLines) {
+    if (extendsStaffLines && drawsStaff) {
       _renderExtendedStaffLines(canvas);
     }
     for (int i = 0; i < measureRendereres.length; i++) {
@@ -131,19 +136,21 @@ class StaffRenderer {
         size,
         suppressLeadingTie: suppressedLeadingTies.contains(i),
         suppressTrailingTie: suppressedTrailingTies.contains(i),
-        drawStaffLines: !extendsStaffLines,
+        drawStaffLines: drawsStaff && !extendsStaffLines,
         inkOf: inkOf == null ? null : (symbol) => inkOf(i, symbol),
       );
     }
-    _renderBarlines(canvas);
-    final lastType = measureRendereres.isEmpty
-        ? null
-        : measureRendereres.last.measureMetrics.endBarline;
-    if (lastType != null) {
-      _renderTypedEndBarline(canvas, lastType);
-    } else {
-      if (showEndBarline) _renderEndBarline(canvas);
-      if (showFinalBarline) _renderFinalBarline(canvas);
+    if (drawsStaff) {
+      _renderBarlines(canvas);
+      final lastType = measureRendereres.isEmpty
+          ? null
+          : measureRendereres.last.measureMetrics.endBarline;
+      if (lastType != null) {
+        _renderTypedEndBarline(canvas, lastType);
+      } else {
+        if (showEndBarline) _renderEndBarline(canvas);
+        if (showFinalBarline) _renderFinalBarline(canvas);
+      }
     }
     _renderCaret(canvas);
     for (final tie in crossMeasureTies) {
