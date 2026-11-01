@@ -31,6 +31,7 @@ class ChordNote implements MusicalSymbol {
     this.isDotted = false,
     this.tuplet,
     this.tie,
+    this.tieDirection,
     this.isBeamed = false,
     this.beamGroupId = 0,
     this.beatPosition = 0.0,
@@ -58,6 +59,10 @@ class ChordNote implements MusicalSymbol {
   /// same pitch in the chord (or note) next to it.
   final TieType? tie;
 
+  /// Which way all its ties bend; null splits them by its heads, the upper
+  /// half up and the lower half down, as on a staff of one voice.
+  final TieDirection? tieDirection;
+
   /// The same chord drawn all in [ink].
   ChordNote withColor(Color ink) => ChordNote(
         noteParts,
@@ -68,6 +73,7 @@ class ChordNote implements MusicalSymbol {
         isDotted: isDotted,
         tuplet: tuplet,
         tie: tie,
+        tieDirection: tieDirection,
         isBeamed: isBeamed,
         beamGroupId: beamGroupId,
         beatPosition: beatPosition,

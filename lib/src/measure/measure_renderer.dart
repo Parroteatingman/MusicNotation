@@ -575,9 +575,12 @@ class MeasureRenderer {
   void _drawTie(Canvas canvas, NoteRenderer start, NoteRenderer? end) {
     final startBounds = start.noteHeadBounds;
     final endBounds = end?.noteHeadBounds;
-    final tieBelow = end != null && start.note.isStemUp != end.note.isStemUp
-        ? false
-        : start.note.isStemUp;
+    final forced = start.note.note.tieDirection;
+    final tieBelow = forced != null
+        ? forced.isDown
+        : end != null && start.note.isStemUp != end.note.isStemUp
+            ? false
+            : start.note.isStemUp;
     final baselineY = tieBelow
         ? startBounds.bottom + Constants.staffSpace * 0.35
         : startBounds.top - Constants.staffSpace * 0.35;
@@ -604,7 +607,7 @@ class MeasureRenderer {
 
   void _drawLeadingTie(Canvas canvas, NoteRenderer end) {
     final endBounds = end.noteHeadBounds;
-    final tieBelow = end.note.isStemUp;
+    final tieBelow = end.note.note.tieDirection?.isDown ?? end.note.isStemUp;
     final baselineY = tieBelow
         ? endBounds.bottom + Constants.staffSpace * 0.35
         : endBounds.top - Constants.staffSpace * 0.35;
@@ -1074,8 +1077,14 @@ List<MapEntry<Pitch, Rect>> drawnHeads(MusicalSymbolRenderer symbol) {
 
 /// Which way the tie on each of [heads] bends, as Gould sets a chord's
 /// ties: the upper half up, the lower half down; a lone head away from its
-/// stem.
-List<bool> _bendsDown(List<MapEntry<Pitch, Rect>> heads, bool stemUp) {
+/// stem. A [forced] direction (one of two voices on a staff) bends them all
+/// one way.
+List<bool> _bendsDown(
+  List<MapEntry<Pitch, Rect>> heads,
+  bool stemUp, {
+  TieDirection? forced,
+}) {
+  if (forced != null) return List.filled(heads.length, forced.isDown);
   if (heads.length == 1) return [stemUp];
   final order = List<int>.generate(heads.length, (i) => i)
     ..sort((a, b) => heads[a].key.position.compareTo(heads[b].key.position));
@@ -1125,7 +1134,7 @@ void drawChordTies(
   final heads = drawnHeads(start);
   if (heads.isEmpty) return;
   final targets = end == null ? null : drawnHeads(end);
-  final down = _bendsDown(heads, _stemUpOf(start));
+  final down = _bendsDown(heads, _stemUpOf(start), forced: _tieDirectionOf(start));
   final color = _colorOf(start);
   for (var i = 0; i < heads.length; i++) {
     final head = heads[i];
@@ -1148,6 +1157,12 @@ bool _stemUpOf(MusicalSymbolRenderer symbol) {
   return false;
 }
 
+TieDirection? _tieDirectionOf(MusicalSymbolRenderer symbol) {
+  if (symbol is NoteRenderer) return symbol.note.note.tieDirection;
+  if (symbol is ChordNoteRenderer) return symbol.note.note.tieDirection;
+  return null;
+}
+
 Color _colorOf(MusicalSymbolRenderer symbol) {
   if (symbol is NoteRenderer) return symbol.note.note.color;
   if (symbol is ChordNoteRenderer) return symbol.note.note.color;
@@ -1164,7 +1179,8 @@ void drawLeadingChordTies(
 }) {
   const space = Constants.staffSpace;
   final heads = drawnHeads(end);
-  final down = _bendsDown(heads, end.note.isStemUp);
+  final down =
+      _bendsDown(heads, end.note.isStemUp, forced: end.note.note.tieDirection);
   for (var i = 0; i < heads.length; i++) {
     final head = heads[i];
     // From just before the chord: on a line's first measure the clef and

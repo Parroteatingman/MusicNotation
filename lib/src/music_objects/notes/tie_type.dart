@@ -11,3 +11,16 @@ enum TieType {
   bool get isStart => this == start || this == both;
   bool get isStop => this == stop || this == both;
 }
+
+/// Which way a note's ties bend, when it is not left to the note's stem.
+///
+/// On a staff of one voice a tie bends away from the stem (a chord's split
+/// up and down by its heads); where two voices share a staff the upper
+/// voice's ties bend up and the lower voice's down (Gould), whatever the
+/// heads.
+enum TieDirection {
+  up,
+  down;
+
+  bool get isDown => this == down;
+}

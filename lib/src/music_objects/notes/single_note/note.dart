@@ -41,6 +41,7 @@ class Note implements MusicalSymbol {
     this.isDotted = false,
     this.tuplet,
     this.tie,
+    this.tieDirection,
   });
 
   @override
@@ -91,6 +92,10 @@ class Note implements MusicalSymbol {
   /// Tie connection type for this note.
   final TieType? tie;
 
+  /// Which way its ties bend; null bends them away from the stem, as on a
+  /// staff of one voice.
+  final TieDirection? tieDirection;
+
   /// Optional color for the note head only. When set, stems/beams/flags stay
   /// at [color] while the note head uses this color.
   final Color? noteHeadColor;
@@ -115,6 +120,7 @@ class Note implements MusicalSymbol {
         isDotted: isDotted,
         tuplet: tuplet,
         tie: tie,
+        tieDirection: tieDirection,
       );
 
   /// The same note without a chord name over it.
@@ -132,6 +138,7 @@ class Note implements MusicalSymbol {
         isDotted: isDotted,
         tuplet: tuplet,
         tie: tie,
+        tieDirection: tieDirection,
       );
 
   @override

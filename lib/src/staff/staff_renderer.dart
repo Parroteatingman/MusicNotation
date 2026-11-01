@@ -233,9 +233,12 @@ class StaffRenderer {
   void _drawCrossMeasureTie(Canvas canvas, _CrossMeasureTie tie) {
     final startBounds = tie.start.noteHeadBounds;
     final endBounds = tie.end.noteHeadBounds;
-    final tieBelow = tie.start.note.isStemUp != tie.end.note.isStemUp
-        ? false
-        : tie.start.note.isStemUp;
+    final forced = tie.start.note.note.tieDirection;
+    final tieBelow = forced != null
+        ? forced.isDown
+        : tie.start.note.isStemUp != tie.end.note.isStemUp
+            ? false
+            : tie.start.note.isStemUp;
     final baselineY = tieBelow
         ? startBounds.bottom + Constants.staffSpace * 0.35
         : startBounds.top - Constants.staffSpace * 0.35;

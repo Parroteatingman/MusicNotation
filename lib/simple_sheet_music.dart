@@ -31,7 +31,7 @@ export 'src/music_objects/rest/rest.dart' show Rest;
 export 'src/music_objects/time_signature/time_signature.dart'
     show TimeSignature, TimeSignatureSymbol;
 export 'src/music_objects/rest/rest_type.dart' show RestType;
-export 'src/music_objects/notes/tie_type.dart' show TieType;
+export 'src/music_objects/notes/tie_type.dart' show TieType, TieDirection;
 export 'src/system/sheet_staff.dart'
     show
         SheetStaff,
