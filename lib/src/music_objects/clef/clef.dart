@@ -15,7 +15,12 @@ class Clef implements MusicalSymbol {
     this.clefType, {
     this.margin = const EdgeInsets.all(10),
     this.color = Colors.black,
+    this.scale = 1,
   });
+
+  /// Its size against a clef opening a line (a clef changing inside a line is
+  /// drawn smaller). It stays on its own line.
+  final double scale;
 
   /// The type of the clef.
   final ClefType clefType;
@@ -63,7 +68,11 @@ class ClefMetrics implements MusicalSymbolMetrics {
   double get width => bbox.width;
 
   /// Gets the path of the clef symbol on the origin.
-  Path get originPath => paths.parsePath(clefType.pathKey);
+  Path get originPath {
+    final path = paths.parsePath(clefType.pathKey);
+    final scale = clef.scale;
+    return scale == 1 ? path : path.transform(Matrix4.diagonal3Values(scale, scale, 1).storage);
+  }
 
   /// Gets the bounding box of the clef symbol on the origin.
   Rect get bboxOnOrigin => originPath.getBounds();
